@@ -24,6 +24,19 @@ Index a repo:
 repo-index index /path/to/git/repo
 ```
 
+Discover and index every git repo under a root:
+
+```bash
+repo-index index-root ~/code
+```
+
+Install freshness hooks for one repo or a repo root:
+
+```bash
+repo-index install-hooks /path/to/git/repo
+repo-index install-hooks ~/code --recursive
+```
+
 Query it:
 
 ```bash
@@ -65,9 +78,16 @@ Agent config example:
 
 Phase 0 eval docs live in `docs/phase-0-baseline.md`. The seed golden set lives in `evals/golden.repo-index-mcp.jsonl`.
 
-## Phase 1 limits
+## Phase 2 behavior
 
-- One-repo indexing flow.
+- `index-root` discovers git repos under a directory.
+- Reindexing compares tracked file content hashes and only re-embeds changed files.
+- Deleted tracked files remove their old chunks from the index.
+- `install-hooks` adds `post-commit` and `post-merge` hooks that run `repo-index reindex "$PWD"`.
+- `status` / `list_repos` report stale repos by comparing indexed commit to current `HEAD`.
+
+## Current limits
+
 - Naive line-window chunks.
 - Local deterministic hash embeddings, not quality-tuned semantic embeddings.
 - SQLite storage implemented with Python cosine search, no ANN/vector extension yet.

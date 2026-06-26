@@ -7,7 +7,9 @@ from repo_index_mcp.chunking import LineChunker
 from repo_index_mcp.embeddings import EmbeddingProvider, HashEmbeddingProvider
 from repo_index_mcp.models import IndexResult, SearchResult
 from repo_index_mcp.repo import (
+    content_hash,
     current_commit,
+    discover_repos,
     iter_text_files,
     repo_id_for,
     resolve_repo_root,
@@ -35,19 +37,39 @@ class RepoIndex:
         repo_root = resolve_repo_root(repo_path)
         repo_id = repo_id_for(repo_root)
         commit_sha = current_commit(repo_root)
-        paths = tracked_files(repo_root)
-        files = list(iter_text_files(repo_root, paths))
-        chunks = self.chunker.chunk_files(repo_id=repo_id, repo_path=str(repo_root), files=files)
-        embeddings = [self.embedding_provider.embed(chunk.content) for chunk in chunks]
+        files = list(iter_text_files(repo_root, tracked_files(repo_root)))
+        current_hashes = {path: content_hash(content) for path, content in files}
+        stored_state = self.storage.indexed_file_state(repo_id=repo_id)
+        if not stored_state and self.storage.chunk_count(repo_id=repo_id):
+            self.storage.clear_repo(repo_id=repo_id)
+        changed_files = [
+            (path, content)
+            for path, content in files
+            if stored_state.get(path) != (current_hashes[path], self.embedding_provider.model_id)
+        ]
+        removed_paths = sorted(set(stored_state) - set(current_hashes))
 
         self.storage.upsert_repo(repo_id=repo_id, repo_path=str(repo_root), commit_sha=commit_sha)
-        chunks_indexed = self.storage.replace_chunks(
-            repo_id=repo_id,
-            chunks=chunks,
-            embeddings=embeddings,
-            commit_sha=commit_sha,
-            embedding_model=self.embedding_provider.model_id,
-        )
+        self.storage.delete_paths(repo_id=repo_id, paths=removed_paths)
+        chunks_indexed = 0
+        for path, file_content in changed_files:
+            chunks = self.chunker.chunk_file(
+                repo_id=repo_id,
+                repo_path=str(repo_root),
+                path=path,
+                content=file_content,
+            )
+            embeddings = [self.embedding_provider.embed(chunk.content) for chunk in chunks]
+            chunks_indexed += self.storage.replace_file_chunks(
+                repo_id=repo_id,
+                path=path,
+                content_hash=current_hashes[path],
+                chunks=chunks,
+                embeddings=embeddings,
+                commit_sha=commit_sha,
+                embedding_model=self.embedding_provider.model_id,
+            )
+
         duration_ms = int((time.monotonic() - start) * 1000)
         return IndexResult(
             repo_id=repo_id,
@@ -56,7 +78,13 @@ class RepoIndex:
             files_indexed=len(files),
             chunks_indexed=chunks_indexed,
             duration_ms=duration_ms,
+            files_changed=len(changed_files),
+            files_removed=len(removed_paths),
+            chunks_total=self.storage.chunk_count(repo_id=repo_id),
         )
+
+    def index_root(self, root: str | Path) -> list[IndexResult]:
+        return [self.index_repo(repo_path) for repo_path in discover_repos(root)]
 
     def query(
         self,

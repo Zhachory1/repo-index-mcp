@@ -8,19 +8,28 @@ from typing import Any
 
 from repo_index_mcp.engine import DEFAULT_DB_PATH, RepoIndex
 from repo_index_mcp.eval import format_report, load_golden_cases, run_recall_eval
+from repo_index_mcp.hooks import install_hooks
+from repo_index_mcp.repo import discover_repos
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    engine = RepoIndex(db_path=args.db)
 
     if args.command == "index":
+        engine = RepoIndex(db_path=args.db)
         result = engine.index_repo(args.repo_path)
         print(json.dumps(asdict(result), indent=2))
         return 0
 
+    if args.command == "index-root":
+        engine = RepoIndex(db_path=args.db)
+        results = engine.index_root(args.root_path)
+        print(json.dumps([asdict(result) for result in results], indent=2))
+        return 0
+
     if args.command == "query":
+        engine = RepoIndex(db_path=args.db)
         results = engine.query(
             args.query,
             repo=args.repo,
@@ -32,15 +41,26 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "status":
+        engine = RepoIndex(db_path=args.db)
         print(json.dumps(engine.list_repos(), indent=2))
         return 0
 
     if args.command == "reindex":
+        engine = RepoIndex(db_path=args.db)
         result = engine.reindex(args.repo_path)
         print(json.dumps(asdict(result), indent=2))
         return 0
 
+    if args.command == "install-hooks":
+        repo_paths = discover_repos(args.path) if args.recursive else [args.path]
+        installed = []
+        for repo_path in repo_paths:
+            installed.extend(install_hooks(repo_path, command=args.command_name, force=args.force))
+        print(json.dumps([str(path) for path in installed], indent=2))
+        return 0
+
     if args.command == "eval":
+        engine = RepoIndex(db_path=args.db)
         engine.index_repo(args.repo_path)
         report = run_recall_eval(engine, load_golden_cases(args.golden_file), k=args.k)
         if args.json:
@@ -72,6 +92,9 @@ def build_parser() -> argparse.ArgumentParser:
     index = subparsers.add_parser("index", help="index one git repo")
     index.add_argument("repo_path", type=Path)
 
+    index_root = subparsers.add_parser("index-root", help="discover and index git repos under root")
+    index_root.add_argument("root_path", type=Path)
+
     query = subparsers.add_parser("query", help="query indexed code")
     query.add_argument("query")
     add_query_args(query)
@@ -81,6 +104,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     reindex = subparsers.add_parser("reindex", help="reindex repo")
     reindex.add_argument("repo_path", nargs="?", type=Path)
+
+    hooks = subparsers.add_parser("install-hooks", help="install freshness git hooks")
+    hooks.add_argument("path", type=Path)
+    hooks.add_argument("--recursive", action="store_true")
+    hooks.add_argument("--force", action="store_true")
+    hooks.add_argument("--command-name", default="repo-index")
 
     eval_parser = subparsers.add_parser("eval", help="run Recall@K over a golden JSONL set")
     eval_parser.add_argument("golden_file", type=Path)

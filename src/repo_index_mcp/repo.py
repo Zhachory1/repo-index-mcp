@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import fnmatch
+import hashlib
 import os
 import subprocess
 from collections.abc import Iterable
@@ -83,12 +84,23 @@ def resolve_repo_root(path: str | Path) -> Path:
 
 
 def repo_id_for(repo_root: Path) -> str:
-    remote = _git(repo_root, "config", "--get", "remote.origin.url", check=False).strip()
-    return remote or str(repo_root)
+    return str(repo_root.resolve())
 
 
 def current_commit(repo_root: Path) -> str:
     return _git(repo_root, "rev-parse", "HEAD").strip()
+
+
+def discover_repos(root: str | Path) -> list[Path]:
+    root_path = Path(root).expanduser().resolve()
+    repos: list[Path] = []
+    for current, dirnames, filenames in os.walk(root_path):
+        if ".git" in dirnames or ".git" in filenames:
+            repos.append(Path(current).resolve())
+            dirnames[:] = []
+            continue
+        dirnames[:] = [name for name in dirnames if not should_prune_dir(name)]
+    return sorted(repos)
 
 
 def tracked_files(repo_root: Path) -> list[str]:
@@ -107,6 +119,25 @@ def iter_text_files(repo_root: Path, paths: Iterable[str]) -> Iterable[tuple[str
             continue
         except OSError:
             continue
+
+
+def content_hash(content: str) -> str:
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+
+def should_prune_dir(name: str) -> bool:
+    return name in {
+        ".git",
+        "node_modules",
+        ".venv",
+        "venv",
+        ".tox",
+        "dist",
+        "build",
+        ".next",
+        "target",
+        "__pycache__",
+    }
 
 
 def should_skip(path: str) -> bool:

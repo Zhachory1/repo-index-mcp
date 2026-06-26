@@ -35,3 +35,6 @@ class IndexResult:
     files_indexed: int
     chunks_indexed: int
     duration_ms: int
+    files_changed: int = 0
+    files_removed: int = 0
+    chunks_total: int = 0

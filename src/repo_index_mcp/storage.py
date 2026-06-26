@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -40,50 +40,97 @@ class SQLiteStorage:
         commit_sha: str,
         embedding_model: str,
     ) -> int:
-        rows = []
-        indexed_at = now_iso()
-        for chunk, embedding in zip(chunks, embeddings, strict=True):
-            rows.append(
-                (
-                    chunk_id_for(chunk),
-                    chunk.repo_id,
-                    chunk.repo_path,
-                    chunk.path,
-                    chunk.language,
-                    chunk.symbol_name,
-                    chunk.start_line,
-                    chunk.end_line,
-                    commit_sha,
-                    chunk.content,
-                    json.dumps(embedding),
-                    embedding_model,
-                    indexed_at,
-                )
-            )
-
+        rows = chunk_rows(chunks, embeddings, commit_sha, embedding_model)
         with self._connect() as conn:
             conn.execute("DELETE FROM chunks WHERE repo_id = ?", (repo_id,))
-            conn.executemany(
+            conn.execute("DELETE FROM indexed_files WHERE repo_id = ?", (repo_id,))
+            insert_chunks(conn, rows)
+        return len(rows)
+
+    def indexed_file_state(self, *, repo_id: str) -> dict[str, tuple[str, str]]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT path, content_hash, embedding_model FROM indexed_files WHERE repo_id = ?",
+                (repo_id,),
+            ).fetchall()
+        return {row[0]: (row[1], row[2]) for row in rows}
+
+    def replace_file_chunks(
+        self,
+        *,
+        repo_id: str,
+        path: str,
+        content_hash: str,
+        chunks: Iterable[Chunk],
+        embeddings: Iterable[list[float]],
+        commit_sha: str,
+        embedding_model: str,
+    ) -> int:
+        rows = chunk_rows(chunks, embeddings, commit_sha, embedding_model)
+        indexed_at = now_iso()
+        with self._connect() as conn:
+            conn.execute("DELETE FROM chunks WHERE repo_id = ? AND path = ?", (repo_id, path))
+            insert_chunks(conn, rows)
+            conn.execute(
                 """
-                INSERT INTO chunks(
-                    chunk_id,
+                INSERT INTO indexed_files(
                     repo_id,
-                    repo_path,
                     path,
-                    language,
-                    symbol_name,
-                    start_line,
-                    end_line,
+                    content_hash,
                     commit_sha,
-                    content,
-                    embedding,
-                    embedding_model,
-                    indexed_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    indexed_at,
+                    chunk_count,
+                    embedding_model
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(repo_id, path) DO UPDATE SET
+                    content_hash = excluded.content_hash,
+                    commit_sha = excluded.commit_sha,
+                    indexed_at = excluded.indexed_at,
+                    chunk_count = excluded.chunk_count,
+                    embedding_model = excluded.embedding_model
                 """,
-                rows,
+                (
+                    repo_id,
+                    path,
+                    content_hash,
+                    commit_sha,
+                    indexed_at,
+                    len(rows),
+                    embedding_model,
+                ),
             )
         return len(rows)
+
+    def clear_repo(self, *, repo_id: str) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM chunks WHERE repo_id = ?", (repo_id,))
+            conn.execute("DELETE FROM indexed_files WHERE repo_id = ?", (repo_id,))
+
+    def delete_paths(self, *, repo_id: str, paths: Sequence[str]) -> int:
+        if not paths:
+            return 0
+        with self._connect() as conn:
+            deleted_chunks = 0
+            for path in paths:
+                cursor = conn.execute(
+                    "DELETE FROM chunks WHERE repo_id = ? AND path = ?",
+                    (repo_id, path),
+                )
+                deleted_chunks += cursor.rowcount
+                conn.execute(
+                    "DELETE FROM indexed_files WHERE repo_id = ? AND path = ?",
+                    (repo_id, path),
+                )
+        return deleted_chunks
+
+    def chunk_count(self, *, repo_id: str) -> int:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM chunks WHERE repo_id = ?",
+                (repo_id,),
+            ).fetchone()
+        return int(row[0])
 
     def search(
         self,
@@ -187,16 +234,108 @@ class SQLiteStorage:
                     commit_sha TEXT NOT NULL,
                     content TEXT NOT NULL,
                     embedding TEXT NOT NULL,
-                    embedding_model TEXT NOT NULL,
+                    embedding_model TEXT NOT NULL DEFAULT '',
                     indexed_at TEXT NOT NULL
                 );
 
+                CREATE TABLE IF NOT EXISTS indexed_files (
+                    repo_id TEXT NOT NULL,
+                    path TEXT NOT NULL,
+                    content_hash TEXT NOT NULL,
+                    commit_sha TEXT NOT NULL,
+                    indexed_at TEXT NOT NULL,
+                    chunk_count INTEGER NOT NULL,
+                    embedding_model TEXT NOT NULL DEFAULT '',
+                    PRIMARY KEY(repo_id, path)
+                );
+                """
+            )
+            ensure_column(
+                conn,
+                table="chunks",
+                column="embedding_model",
+                definition="TEXT NOT NULL DEFAULT ''",
+            )
+            ensure_column(
+                conn,
+                table="indexed_files",
+                column="embedding_model",
+                definition="TEXT NOT NULL DEFAULT ''",
+            )
+            conn.executescript(
+                """
                 CREATE INDEX IF NOT EXISTS idx_chunks_repo ON chunks(repo_id);
                 CREATE INDEX IF NOT EXISTS idx_chunks_path ON chunks(path);
                 CREATE INDEX IF NOT EXISTS idx_chunks_language ON chunks(language);
                 CREATE INDEX IF NOT EXISTS idx_chunks_model ON chunks(embedding_model);
+                CREATE INDEX IF NOT EXISTS idx_indexed_files_repo ON indexed_files(repo_id);
                 """
             )
+
+
+def ensure_column(
+    conn: sqlite3.Connection,
+    *,
+    table: str,
+    column: str,
+    definition: str,
+) -> None:
+    columns = {
+        row[1]
+        for row in conn.execute(f"PRAGMA table_info({table})")
+    }
+    if column not in columns:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+
+def chunk_rows(
+    chunks: Iterable[Chunk],
+    embeddings: Iterable[list[float]],
+    commit_sha: str,
+    embedding_model: str,
+) -> list[tuple[object, ...]]:
+    indexed_at = now_iso()
+    return [
+        (
+            chunk_id_for(chunk),
+            chunk.repo_id,
+            chunk.repo_path,
+            chunk.path,
+            chunk.language,
+            chunk.symbol_name,
+            chunk.start_line,
+            chunk.end_line,
+            commit_sha,
+            chunk.content,
+            json.dumps(embedding),
+            embedding_model,
+            indexed_at,
+        )
+        for chunk, embedding in zip(chunks, embeddings, strict=True)
+    ]
+
+
+def insert_chunks(conn: sqlite3.Connection, rows: Sequence[tuple[object, ...]]) -> None:
+    conn.executemany(
+        """
+        INSERT INTO chunks(
+            chunk_id,
+            repo_id,
+            repo_path,
+            path,
+            language,
+            symbol_name,
+            start_line,
+            end_line,
+            commit_sha,
+            content,
+            embedding,
+            embedding_model,
+            indexed_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        rows,
+    )
 
 
 def chunk_id_for(chunk: Chunk) -> str:
