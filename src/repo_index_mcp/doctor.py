@@ -1,0 +1,58 @@
+from __future__ import annotations
+
+import importlib.util
+import os
+import shutil
+import sys
+from pathlib import Path
+from typing import Any
+
+from repo_index_mcp import __version__
+from repo_index_mcp.storage import SQLiteStorage
+
+
+def run_doctor(db_path: str | Path) -> tuple[dict[str, Any], int]:
+    db = Path(db_path).expanduser()
+    checks = {
+        "git": check_git(),
+        "db_writable": check_db_writable(db),
+        "mcp_dependency": check_importable("mcp"),
+    }
+    repo_count = None
+    if checks["db_writable"]["ok"]:
+        try:
+            repo_count = len(SQLiteStorage(db).list_repos())
+        except Exception as exc:
+            checks["db_writable"] = {"ok": False, "detail": str(exc)}
+
+    result: dict[str, Any] = {
+        "ok": all(check["ok"] for check in checks.values()),
+        "version": __version__,
+        "python": sys.version.split()[0],
+        "db_path": str(db),
+        "repo_count": repo_count,
+        "checks": checks,
+    }
+    return result, 0 if result["ok"] else 1
+
+
+def check_git() -> dict[str, Any]:
+    path = shutil.which("git")
+    return {"ok": path is not None, "detail": path or "git not found on PATH"}
+
+
+def check_importable(module: str) -> dict[str, Any]:
+    importable = importlib.util.find_spec(module) is not None
+    return {"ok": importable, "detail": "importable" if importable else f"{module} not importable"}
+
+
+def check_db_writable(db_path: Path) -> dict[str, Any]:
+    try:
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        with db_path.open("ab"):
+            pass
+        if not os.access(db_path, os.W_OK):
+            return {"ok": False, "detail": "database path is not writable"}
+        return {"ok": True, "detail": "writable"}
+    except Exception as exc:
+        return {"ok": False, "detail": str(exc)}

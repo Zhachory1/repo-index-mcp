@@ -1,11 +1,13 @@
 # repo-index-mcp
 
-Local codebase retrieval tool for coding agents. Phase 1 is a walking skeleton: index one git repo into SQLite, query chunks from the CLI, and expose retrieval over MCP stdio.
+Local codebase retrieval tool for coding agents. It indexes committed code from local git repos into a local SQLite database, then exposes ranked snippets through a CLI and MCP stdio server.
 
 ## Install
 
+From GitHub with `pipx`:
+
 ```bash
-pipx install .
+pipx install git+https://github.com/Zhachory1/repo-index-mcp.git
 ```
 
 For development:
@@ -16,25 +18,18 @@ source .venv/bin/activate
 pip install -e '.[dev]'
 ```
 
-## Use
+Check local readiness:
 
-Index a repo:
+```bash
+repo-index doctor
+```
+
+## First success path
+
+Index this repo or another local git repo:
 
 ```bash
 repo-index index /path/to/git/repo
-```
-
-Discover and index every git repo under a root:
-
-```bash
-repo-index index-root ~/code
-```
-
-Install freshness hooks for one repo or a repo root:
-
-```bash
-repo-index install-hooks /path/to/git/repo
-repo-index install-hooks ~/code --recursive
 ```
 
 Query it:
@@ -43,17 +38,19 @@ Query it:
 repo-index query "where is request retry handled" -k 5
 ```
 
-Show indexed repos:
+Discover and index every git repo under a root:
+
+```bash
+repo-index index-root ~/code
+```
+
+Show indexed repos and freshness:
 
 ```bash
 repo-index status
 ```
 
-Run the Phase 0 eval set:
-
-```bash
-repo-index eval evals/golden.repo-index-mcp.jsonl . -k 10
-```
+## MCP setup
 
 Run the MCP server over stdio:
 
@@ -74,31 +71,52 @@ Agent config example:
 }
 ```
 
+## Freshness hooks
+
+Install hooks for one repo or a repo root:
+
+```bash
+repo-index install-hooks /path/to/git/repo
+repo-index install-hooks ~/code --recursive
+```
+
+Hooks run best-effort after commit/merge:
+
+```bash
+repo-index --db <db> reindex "$PWD"
+```
+
+They preserve the selected DB path and must not fail git commands.
+
 ## Evals
 
 Phase 0 eval docs live in `docs/phase-0-baseline.md`. The seed golden set lives in `evals/golden.repo-index-mcp.jsonl`.
 
-## Phase 3 quality behavior
+Run the eval gate:
+
+```bash
+repo-index eval evals/golden.repo-index-mcp.jsonl . -k 10 --fail-under 0.85
+```
+
+## Retrieval behavior
 
 - Python functions/classes/methods get parser-backed symbol metadata.
 - Common declaration patterns get regex-backed symbol metadata.
 - `get_symbol` uses stored symbol metadata before search fallback.
 - Search blends vector, lexical, symbol, and path scores.
+- Results include stale/dirty flags.
 
-## Phase 2 behavior
+## Data boundary and safety
 
-- `index-root` discovers git repos under a directory.
-- Reindexing compares committed file content hashes and only re-embeds changed files.
-- Deleted tracked files remove their old chunks from the index.
-- `install-hooks` adds `post-commit` and `post-merge` hooks that run `repo-index --db <db> reindex "$PWD"`.
-- `status` / `list_repos` report stale repos by comparing indexed commit to current `HEAD`.
+- Default embeddings are local deterministic hash vectors.
+- Default configuration does not send source code to external APIs.
+- Index data is local SQLite derived data and can be deleted/rebuilt.
+- Files matching high-confidence secret patterns are skipped and prior chunks for those paths are removed.
+- Secret skipping is a best-effort local guardrail, not a guarantee. See `SECURITY.md`.
 
 ## Current limits
 
 - Python gets parser-backed symbol chunks; other languages use regex-backed symbol hints plus line windows.
 - Local deterministic hash embeddings, not quality-tuned semantic embeddings.
 - SQLite storage scans/scoring in Python, no ANN/vector extension yet.
-
-## Data boundary
-
-Default embedding is local and deterministic. Source code is not sent to external APIs.
+- Freshness is committed-code freshness; dirty working-tree edits are reported but not indexed.

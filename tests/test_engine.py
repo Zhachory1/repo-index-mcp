@@ -6,6 +6,10 @@ from pathlib import Path
 
 from repo_index_mcp.embeddings import HashEmbeddingProvider
 from repo_index_mcp.engine import RepoIndex
+from repo_index_mcp.models import Chunk
+from repo_index_mcp.repo import content_hash, current_commit, repo_id_for
+from repo_index_mcp.secrets import looks_like_secret
+from repo_index_mcp.storage import SQLiteStorage
 
 
 def test_index_repo_and_query_returns_code(tmp_path: Path) -> None:
@@ -107,6 +111,113 @@ def test_index_repo_removes_deleted_file_chunks(tmp_path: Path) -> None:
     assert result.files_removed == 1
     assert result.chunks_total == 1
     assert all(search_result.path != "old.py" for search_result in results)
+
+
+def test_secret_detector_catches_high_confidence_patterns() -> None:
+    assert looks_like_secret(pem_header("PRIVATE"))
+    assert looks_like_secret(pem_header("ENCRYPTED PRIVATE"))
+    assert looks_like_secret("aws_access_key_id = " + "AKIA" + "ABCDEFGHIJKLMNOP")
+    assert looks_like_secret("token = " + github_token("ghp"))
+    assert looks_like_secret("token = " + github_token("gho"))
+    assert looks_like_secret("token = " + github_token("ghu"))
+    assert looks_like_secret("token = " + github_token("ghs"))
+    assert looks_like_secret("token = " + github_token("ghr"))
+
+
+def test_index_repo_skips_secret_looking_file(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "secret.py").write_text(
+        f"TOKEN = '{github_token('ghp')}'\n",
+        encoding="utf-8",
+    )
+    init_repo(repo)
+    commit_all(repo, "init")
+
+    engine = RepoIndex(db_path=tmp_path / "index.sqlite")
+    result = engine.index_repo(repo)
+    results = engine.query("ghp abcdefghijklmnopqrstuvwxyz", k=5)
+
+    assert result.files_skipped == 1
+    assert result.chunks_total == 0
+    assert results == []
+
+
+def test_index_repo_secret_filter_upgrade_removes_existing_secret_same_commit(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    db_path = tmp_path / "index.sqlite"
+    repo.mkdir()
+    secret_content = f"TOKEN = '{github_token('ghp')}'\n"
+    (repo / "config.py").write_text(secret_content, encoding="utf-8")
+    init_repo(repo)
+    commit_all(repo, "init")
+    repo_id = repo_id_for(repo)
+    model_id = HashEmbeddingProvider().model_id
+    storage = SQLiteStorage(db_path)
+    storage.record_repo_success(
+        repo_id=repo_id,
+        repo_path=str(repo),
+        commit_sha=current_commit(repo),
+        remote_url="",
+    )
+    storage.replace_file_chunks(
+        repo_id=repo_id,
+        path="config.py",
+        content_hash=content_hash(secret_content),
+        chunks=[
+            Chunk(
+                repo_id=repo_id,
+                repo_path=str(repo),
+                path="config.py",
+                language="python",
+                symbol_name=None,
+                symbol_kind=None,
+                symbol_line=None,
+                symbol_confidence=None,
+                start_line=1,
+                end_line=1,
+                content=secret_content,
+            )
+        ],
+        embeddings=[HashEmbeddingProvider().embed(secret_content)],
+        commit_sha=current_commit(repo),
+        embedding_model=model_id,
+        chunker_version="symbol-line-v1:max=80:overlap=10",
+    )
+
+    engine = RepoIndex(db_path=db_path)
+    result = engine.index_repo(repo)
+    results = engine.query("ghp abcdefghijklmnopqrstuvwxyz", k=5)
+
+    assert result.files_skipped == 1
+    assert result.files_removed == 1
+    assert result.chunks_total == 0
+    assert results == []
+
+
+def test_index_repo_removes_chunks_when_file_becomes_secret(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "config.py").write_text("TOKEN = 'safe placeholder'\n", encoding="utf-8")
+    init_repo(repo)
+    commit_all(repo, "init")
+
+    engine = RepoIndex(db_path=tmp_path / "index.sqlite")
+    engine.index_repo(repo)
+    (repo / "config.py").write_text(
+        f"TOKEN = '{github_token('ghp')}'\n",
+        encoding="utf-8",
+    )
+    commit_all(repo, "secret")
+    result = engine.index_repo(repo)
+    results = engine.query("safe placeholder", k=5)
+
+    assert result.files_skipped == 1
+    assert result.files_removed == 1
+    assert result.chunks_total == 0
+    assert results == []
 
 
 def test_index_repo_skips_gitlinks(tmp_path: Path) -> None:
@@ -418,6 +529,14 @@ class FailingChunker:
 
     def chunk_file(self, **_kwargs):  # type: ignore[no-untyped-def]
         raise RuntimeError("chunk failed")
+
+
+def github_token(prefix: str) -> str:
+    return prefix + "_" + "abcdefghijklmnopqrstuvwxyz"
+
+
+def pem_header(kind: str) -> str:
+    return "-----BEGIN " + kind + " KEY-----\nsecret\n-----END " + kind + " KEY-----"
 
 
 def init_repo(repo: Path) -> None:

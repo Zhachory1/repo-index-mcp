@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dev package
+        run: python -m pip install -e '.[dev]'
+      - name: Lint
+        run: ruff check .
+      - name: Test
+        run: pytest -q
+      - name: Eval gate
+        run: repo-index --db .repo-index-mcp/ci.sqlite eval evals/golden.repo-index-mcp.jsonl . -k 10 --fail-under 0.85
+      - name: Build package
+        run: python -m build
+      - name: Installed console smoke
+        run: |
+          python -m venv /tmp/repo-index-smoke
+          /tmp/repo-index-smoke/bin/pip install dist/*.whl
+          /tmp/repo-index-smoke/bin/repo-index --help
+          /tmp/repo-index-smoke/bin/repo-index --db /tmp/repo-index-smoke/index.sqlite doctor
+          mkdir -p /tmp/repo-index-fixture
+          cd /tmp/repo-index-fixture
+          git init -b main
+          git config user.email test@example.com
+          git config user.name Test
+          git config commit.gpgsign false
+          printf 'def hello_world():\n    return True\n' > app.py
+          git add app.py
+          git commit -m init
+          /tmp/repo-index-smoke/bin/repo-index --db /tmp/repo-index-smoke/index.sqlite index .
+          /tmp/repo-index-smoke/bin/repo-index --db /tmp/repo-index-smoke/index.sqlite query hello_world -k 1

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Iterable
 from dataclasses import replace
 from pathlib import Path
 
@@ -20,6 +21,7 @@ from repo_index_mcp.repo import (
     repo_id_for,
     resolve_repo_root,
 )
+from repo_index_mcp.secrets import SECRET_FILTER_VERSION, looks_like_secret
 from repo_index_mcp.storage import SQLiteStorage
 
 DEFAULT_DB_PATH = Path.home() / ".repo-index-mcp" / "index.sqlite"
@@ -44,7 +46,7 @@ class RepoIndex:
         repo_path_str = str(repo_root)
         remote_url = remote_url_for(repo_root)
         expected_model = self.embedding_provider.model_id
-        chunker_version = self.chunker.version
+        chunker_version = f"{self.chunker.version}:{SECRET_FILTER_VERSION}"
         commit_sha = ""
         try:
             commit_sha = current_commit(repo_root)
@@ -61,11 +63,13 @@ class RepoIndex:
             changed_paths: list[str] = []
             if needs_full_scan:
                 paths = committed_files(repo_root, commit_sha)
-                files = list(iter_committed_text_files(repo_root, commit_sha, paths))
+                files, skipped_paths = filter_secret_files(
+                    iter_committed_text_files(repo_root, commit_sha, paths)
+                )
                 current_hashes = {
                     path: content_hash(file_content) for path, file_content in files
                 }
-                removed_paths = sorted(set(stored_state) - set(current_hashes))
+                removed_paths = sorted((set(stored_state) - set(current_hashes)) | skipped_paths)
                 files_indexed = len(files)
             else:
                 changed_paths, removed_paths = (
@@ -74,14 +78,18 @@ class RepoIndex:
                     else changed_paths_between(repo_root, prior_commit, commit_sha)
                 )
                 paths = committed_blob_paths(repo_root, commit_sha, changed_paths)
-                files = list(iter_committed_text_files(repo_root, commit_sha, paths))
+                files, skipped_paths = filter_secret_files(
+                    iter_committed_text_files(repo_root, commit_sha, paths)
+                )
                 current_hashes = {
                     path: content_hash(file_content) for path, file_content in files
                 }
                 ineligible_changed_paths = (
                     (set(changed_paths) & set(stored_state)) - set(current_hashes)
                 )
-                removed_paths = sorted(set(removed_paths) | ineligible_changed_paths)
+                removed_paths = sorted(
+                    set(removed_paths) | ineligible_changed_paths | skipped_paths
+                )
                 files_indexed = len(stored_state) - len(removed_paths) + sum(
                     1 for path, _content in files if path not in stored_state
                 )
@@ -168,6 +176,7 @@ class RepoIndex:
             duration_ms=duration_ms,
             files_changed=len(changed_files),
             files_removed=len(removed_paths),
+            files_skipped=len(skipped_paths),
             chunks_total=self.storage.chunk_count(repo_id=repo_id),
             error_count=len(errors),
             last_error=last_error,
@@ -273,3 +282,14 @@ class RepoIndex:
         if len(repo_paths) != 1:
             raise ValueError("repo_path is required unless exactly one repo is indexed")
         return self.index_repo(repo_paths[0])
+
+
+def filter_secret_files(files: Iterable[tuple[str, str]]) -> tuple[list[tuple[str, str]], set[str]]:
+    safe_files: list[tuple[str, str]] = []
+    skipped_paths: set[str] = set()
+    for path, content in files:
+        if looks_like_secret(content):
+            skipped_paths.add(path)
+        else:
+            safe_files.append((path, content))
+    return safe_files, skipped_paths

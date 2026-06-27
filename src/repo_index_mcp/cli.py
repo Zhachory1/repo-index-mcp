@@ -6,6 +6,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
+from repo_index_mcp.doctor import run_doctor
 from repo_index_mcp.engine import DEFAULT_DB_PATH, RepoIndex
 from repo_index_mcp.eval import format_report, load_golden_cases, run_recall_eval
 from repo_index_mcp.hooks import install_hooks
@@ -44,6 +45,11 @@ def main(argv: list[str] | None = None) -> int:
         engine = RepoIndex(db_path=args.db)
         print(json.dumps(engine.list_repos(), indent=2))
         return 0
+
+    if args.command == "doctor":
+        result, exit_code = run_doctor(args.db)
+        print(json.dumps(result, indent=2))
+        return exit_code
 
     if args.command == "reindex":
         engine = RepoIndex(db_path=args.db)
@@ -111,6 +117,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     status = subparsers.add_parser("status", help="list indexed repos")
     status.set_defaults(_status=True)
+
+    doctor = subparsers.add_parser("doctor", help="check local setup and MCP readiness")
+    doctor.set_defaults(_doctor=True)
 
     reindex = subparsers.add_parser("reindex", help="reindex repo")
     reindex.add_argument("repo_path", nargs="?", type=Path)
