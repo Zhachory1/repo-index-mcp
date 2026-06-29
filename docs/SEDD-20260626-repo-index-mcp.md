@@ -39,7 +39,7 @@ The pain is corroborated by the field: agents on large codebases routinely hit c
 | **Latency** | p95 query latency, warm index, local | ≤ 500 ms |
 | **Freshness** | Lag between a commit and that change being queryable | ≤ 60 s (incremental) |
 | **Throughput** | Cold full index of a ~100k LOC repo | ≤ 10 min |
-| **Adoption** | Engineers with the MCP wired into their agent after 4 weeks | *[TODO: set a target]* |
+| **Adoption** | Engineers with the MCP wired into their agent after 4 weeks | ≥ 5 engineers |
 
 > Recall@10 is a **proxy** for "the agent did better work." Triangulate it with the productivity metric and one qualitative signal (do people keep it turned on?). Don't optimize the proxy into the ground.
 
@@ -293,12 +293,12 @@ Local-appropriate golden-signal analogues, surfaced via `status` and structured 
 - **Phase 1 — Walking skeleton.** Index one repo (SQLite), naive line-window chunking, semantic `search_code` over MCP, CLI query. **Exit: an agent retrieves real code end-to-end.**
 - **Phase 2 — Fresh & multi-repo.** Incremental git-aware re-index (chunk-hash diff), multi-repo discovery, filters, freshness trigger. **Exit: ≤60s freshness met across a directory of repos; benchmark cold-index throughput.**
 - **Phase 3 — Quality.** Swap to tree-sitter chunking; hybrid retrieval + `get_symbol`; tune against the eval set. **Exit: Recall@10 ≥ 0.85 (North Star met).**
-- **Phase 4 — Hardening / Postgres.** `StorageProvider` Postgres implementation, structured logging/status, secret-exclusion verified. **Exit: ready to share beyond the author.**
+- **Phase 4 — Hardening / share readiness.** CI, install docs, `doctor`, structured status, and best-effort secret exclusion verified. **Exit: ready to share beyond the author.** Postgres is deferred to a separate shared-service design.
 
 ## 6.2 Testing Strategy (the Testing Pyramid)
 
 - **Unit (~70%)** — chunk-boundary logic, chunk-hash/diff logic, `repo_id` derivation, rank blending, snippet/line-range extraction. State inputs/outputs directly (DAMP); no logic in tests.
-- **Integration (~20%)** — a single **`StorageProvider` conformance suite run against *both* real SQLite and a real ephemeral Postgres.** This follows established testing practice: prefer **reals/fakes over mocks**, and "**don't mock types you don't own**" — we exercise the real stores, not a mock of them. Embedding consistency (index vs query) gets an explicit test.
+- **Integration (~20%)** — exercise the real SQLite store and real CLI/MCP-adjacent paths. If Postgres returns in a shared-service design, add a `StorageProvider` conformance suite that runs against real SQLite and real ephemeral Postgres. Embedding consistency (index vs query) gets an explicit test.
 - **E2E (~10%)** — index a fixture repo → query over the **real MCP transport** → assert the expected snippet/symbol is returned. One test per critical path (`search_code`, `get_symbol`, incremental reindex).
 - **Quality regression gate** — the golden eval set runs in CI; a drop in Recall@10 below target **fails the build**. This is the "rollback threshold" equivalent.
 
@@ -332,13 +332,13 @@ Local-appropriate golden-signal analogues, surfaced via `status` and structured 
 1. **Embedding provider sign-off (blocking):** is any hosted embedding endpoint pre-approved for source code, or is local mandatory for v1? (Decision 1.)
 2. **Target agents:** confirm the v1 consumer set so we validate the stdio MCP contract against each (PRD dependency).
 3. **Specific local embedding model:** pick by **benchmarking candidates against the golden eval set**, not by reputation — deliberately deferred so the data decides (kept behind `EmbeddingProvider`).
-4. **Adoption target:** set the Phase-4 number.
+4. **Adoption target tracking:** measure whether ≥5 engineers wire the MCP into their agent after 4 weeks.
 5. **Rerank:** include a cross-encoder reranker only if Phase 3 eval data shows we miss Recall@10 without it *and* it fits the latency budget.
 
 **Dependencies:**
 - MCP client support confirmed in the target agent(s).
 - A vetted/approved embedding endpoint **only if** Option 1B is pursued (gated by a security review).
-- A Postgres instance **only** for the shared/Phase-4 path.
+- A Postgres instance **only** for a future shared-service path, not v1 local hardening.
 
 ---
 

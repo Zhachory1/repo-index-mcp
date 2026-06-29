@@ -70,7 +70,7 @@ Coding agents are only as good as the context they're given. Cheap, local, seman
 | **Latency (UX)** | p95 query latency (warm index) | ≤ 500 ms local |
 | **Freshness** | Lag between a commit and that change being queryable | ≤ 60 s (incremental) |
 | **Indexing throughput** | Full cold index of a medium repo (~100k LOC) | ≤ 10 min |
-| **Adoption** | # engineers with the MCP wired into their agent after 4 weeks | *[TODO: set a target]* |
+| **Adoption** | # engineers with the MCP wired into their agent after 4 weeks | ≥ 5 engineers |
 
 > Recall@10 is a *proxy* for "the agent did better work." Triangulate it with the productivity metric and at least one qualitative signal (do people keep it turned on?). Don't optimize the proxy into the ground.
 
@@ -221,7 +221,7 @@ Impact can't be proven without a baseline.
 - **Phase 1 — Walking skeleton.** Index one repo (SQLite), naive chunking, semantic `search_code` over MCP, CLI query. *Exit: agent retrieves real code end-to-end.*
 - **Phase 2 — Fresh & multi-repo.** Incremental git-aware re-index, multi-repo discovery, filters. *Exit: freshness target met across a directory of repos.*
 - **Phase 3 — Quality.** Hybrid retrieval + symbol lookup; tune against the eval set to hit Recall@10 ≥ 0.85. *Exit: North Star target met.*
-- **Phase 4 — Hardening / Postgres backend.** Pluggable Postgres store, logging/status, secret exclusion verified. *Exit: ready to share.*
+- **Phase 4 — Hardening / share readiness.** CI, install/docs, local doctor, logging/status, and best-effort secret exclusion verified. *Exit: ready to share.*
 
 ---
 
@@ -230,4 +230,4 @@ Impact can't be proven without a baseline.
 Naming the shortcuts now keeps them from rotting silently.
 
 - **v1 shortcuts to track:** naive chunking in Phase 1 (replace with semantic chunking in Phase 3); single-branch indexing (multi-branch deferred to P2); no shared auth (deferred with N1).
-- **Future direction:** if the local tool proves its value, expand to a shared, multi-user service — at which point auth, RBAC, and a managed datastore become required and warrant their own design doc.
+- **Future direction:** if the local tool proves its value, expand to a shared, multi-user service — at which point auth, RBAC, Postgres/managed datastore, and a dedicated storage-provider design become required and warrant their own design doc.
