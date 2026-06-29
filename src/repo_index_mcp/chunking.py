@@ -6,6 +6,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 from repo_index_mcp.models import Chunk
+from repo_index_mcp.parsers import ParsedSymbol, parse_symbols
 
 LANGUAGE_BY_SUFFIX = {
     ".py": "python",
@@ -77,7 +78,7 @@ class LineChunker:
 
     @property
     def version(self) -> str:
-        return f"symbol-line-v1:max={self.max_lines}:overlap={self.overlap_lines}"
+        return f"symbol-tree-sitter-v2:max={self.max_lines}:overlap={self.overlap_lines}"
 
     def chunk_file(
         self,
@@ -124,6 +125,28 @@ class LineChunker:
                     )
                 )
                 return dedupe_chunks(chunks)
+
+        parsed_symbols = parse_symbols(language=language, path=path, content=content)
+        if parsed_symbols:
+            chunks = self._chunk_line_windows(
+                repo_id=repo_id,
+                repo_path=repo_path,
+                path=path,
+                language=language,
+                lines=lines,
+                symbols=parsed_symbols_to_symbols(parsed_symbols),
+            )
+            chunks.extend(
+                self._chunk_parsed_symbols(
+                    repo_id=repo_id,
+                    repo_path=repo_path,
+                    path=path,
+                    language=language,
+                    lines=lines,
+                    symbols=parsed_symbols,
+                )
+            )
+            return dedupe_chunks(chunks)
 
         regex_symbols = find_regex_symbols(lines)
         chunks = self._chunk_line_windows(
@@ -238,6 +261,38 @@ class LineChunker:
 
         return chunks
 
+    def _chunk_parsed_symbols(
+        self,
+        *,
+        repo_id: str,
+        repo_path: str,
+        path: str,
+        language: str,
+        lines: list[str],
+        symbols: list[ParsedSymbol],
+    ) -> list[Chunk]:
+        chunks: list[Chunk] = []
+        for symbol in symbols:
+            end_line = min(symbol.end_line, len(lines))
+            if end_line - symbol.start_line + 1 > self.max_lines:
+                continue
+            chunks.append(
+                Chunk(
+                    repo_id=repo_id,
+                    repo_path=repo_path,
+                    path=path,
+                    language=language,
+                    symbol_name=symbol.name,
+                    symbol_kind=symbol.kind,
+                    symbol_line=symbol.symbol_line,
+                    symbol_confidence="parser",
+                    start_line=symbol.start_line,
+                    end_line=end_line,
+                    content="\n".join(lines[symbol.start_line - 1 : end_line]),
+                )
+            )
+        return chunks
+
     def _chunk_regex_symbols(
         self,
         *,
@@ -269,6 +324,18 @@ class LineChunker:
         return chunks
 
 
+def parsed_symbols_to_symbols(symbols: list[ParsedSymbol]) -> list[Symbol]:
+    return [
+        Symbol(
+            name=symbol.name,
+            kind=symbol.kind,
+            line=symbol.symbol_line,
+            confidence="parser",
+        )
+        for symbol in symbols
+    ]
+
+
 def python_symbol_nodes(
     tree: ast.Module,
 ) -> list[ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef]:
@@ -297,9 +364,16 @@ def python_symbol_start_line(node: ast.ClassDef | ast.FunctionDef | ast.AsyncFun
 
 
 def dedupe_chunks(chunks: list[Chunk]) -> list[Chunk]:
-    deduped: dict[tuple[str, int, int, str], Chunk] = {}
+    deduped: dict[tuple[str, int, int, str, str | None, str | None], Chunk] = {}
     for chunk in chunks:
-        key = (chunk.path, chunk.start_line, chunk.end_line, chunk.content)
+        key = (
+            chunk.path,
+            chunk.start_line,
+            chunk.end_line,
+            chunk.content,
+            chunk.symbol_name,
+            chunk.symbol_confidence,
+        )
         existing = deduped.get(key)
         if existing is None or symbol_priority(chunk) > symbol_priority(existing):
             deduped[key] = chunk

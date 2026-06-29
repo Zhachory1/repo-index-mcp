@@ -136,7 +136,8 @@ See `docs/pilot.md` for activation, timing, miss capture, and decision gates.
 ## Retrieval behavior
 
 - Python functions/classes/methods get parser-backed symbol metadata.
-- Common declaration patterns get regex-backed symbol metadata.
+- TS/JS/Go/Java/Rust/C/C++/SQL get Tree-sitter parser-backed symbol metadata.
+- Other common declaration patterns get regex-backed symbol metadata.
 - `get_symbol` uses stored symbol metadata before search fallback.
 - Search blends vector, lexical, symbol, and path scores.
 - Results include stale/dirty flags.
@@ -151,7 +152,7 @@ See `docs/pilot.md` for activation, timing, miss capture, and decision gates.
 
 ## Current limits
 
-- Python gets parser-backed symbol chunks; other languages use regex-backed symbol hints plus line windows.
+- Python uses stdlib AST parser chunks; TS/JS/Go/Java/Rust/C/C++/SQL use Tree-sitter parser chunks; other languages use regex-backed symbol hints plus line windows.
 - Local deterministic hash embeddings, not quality-tuned semantic embeddings.
 - SQLite storage scans/scoring in Python, no ANN/vector extension yet.
 - Freshness is committed-code freshness; dirty working-tree edits are reported but not indexed.

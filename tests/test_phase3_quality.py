@@ -1,6 +1,8 @@
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from repo_index_mcp.chunking import LineChunker, find_regex_symbols
 from repo_index_mcp.engine import RepoIndex
 from repo_index_mcp.models import Chunk, SearchResult
@@ -86,7 +88,8 @@ def test_regex_symbols_ignore_comments_and_strings() -> None:
     assert symbols[0].kind == "function"
 
 
-def test_regex_symbol_chunks_include_multiple_declarations() -> None:
+def test_parser_symbol_chunks_include_multiple_javascript_declarations() -> None:
+    pytest.importorskip("tree_sitter_language_pack")
     chunks = LineChunker().chunk_file(
         repo_id="repo",
         repo_path="/repo",
@@ -94,9 +97,9 @@ def test_regex_symbol_chunks_include_multiple_declarations() -> None:
         content="function first() {}\nfunction second() {}\n",
     )
 
-    regex_symbols = [chunk.symbol_name for chunk in chunks if chunk.symbol_confidence == "regex"]
-    assert "first" in regex_symbols
-    assert "second" in regex_symbols
+    parser_symbols = [chunk.symbol_name for chunk in chunks if chunk.symbol_confidence == "parser"]
+    assert "first" in parser_symbols
+    assert "second" in parser_symbols
 
 
 def test_hybrid_score_lifts_exact_identifier_match() -> None:
