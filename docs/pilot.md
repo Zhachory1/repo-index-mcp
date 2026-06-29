@@ -13,14 +13,38 @@ Recruit 5 engineers who regularly work across unfamiliar or multi-repo code.
 
 ## Success metrics
 
-- 5 engineers configure MCP within 4 weeks.
-- 5 engineers activate: smoke test done, at least one work repo indexed, at least one successful MCP tool call.
+- Target: 5 engineers configure MCP within 4 weeks.
+- Target: 5 engineers activate; expansion threshold is at least 4 of 5 valid activations.
 - Each activated engineer uses MCP on at least 2 real tasks.
 - 70% keep it enabled after week 2.
 - At least 10 representative tasks measured with decision-grade timing.
 - Primary metric: median observed context-assembly minutes reduced by 50% on decision-grade rows.
-- Secondary metric: median manual file-pastes reduced by 50% on decision-grade rows.
+- Secondary supporting metric: median manual file-pastes reduced by 50% on decision-grade rows.
 - Recurring misses become new eval cases.
+
+## Local log
+
+Pilot events are written locally to:
+
+```bash
+~/.repo-index-mcp/usage.jsonl
+```
+
+The log records task events, activations, retention, and misses. Passive query logging is off by default. When enabled, it records local salted query IDs/lengths, result counts, top paths, and latency. It does not store snippets or raw query text by default.
+
+Enable passive query logging for a pilot session:
+
+```bash
+REPO_INDEX_ENABLE_USAGE_LOG=1 repo-index serve
+```
+
+Set `REPO_INDEX_LOG_RAW_TEXT=1` only if you explicitly want raw query/miss text in the local log.
+
+Disable logging for a command if needed:
+
+```bash
+REPO_INDEX_DISABLE_USAGE_LOG=1 repo-index query "..."
+```
 
 ## Activation checklist
 
@@ -32,11 +56,96 @@ A pilot engineer is activated only when all are true:
 4. Engineer successfully calls `list_repos` through MCP.
 5. Engineer successfully calls `search_code` through MCP and gets a relevant result.
 
+Record activation:
+
+```bash
+repo-index pilot activate \
+  --engineer "Ada" \
+  --client mewrite \
+  --repo ~/code/example \
+  --doctor-ok \
+  --repo-indexed \
+  --tools-visible \
+  --list-repos-ok \
+  --search-code-ok \
+  --relevant-result \
+  --notes "list_repos and search_code worked"
+```
+
+## Task commands
+
+Start a measured task:
+
+```bash
+TASK_ID=$(repo-index pilot start-task \
+  --engineer "Ada" \
+  --task "find retry implementation" \
+  --task-class "code search" \
+  --repo ~/code/example | python3 -c 'import json,sys; print(json.load(sys.stdin)["task_id"])')
+```
+
+End a measured task:
+
+```bash
+repo-index pilot end-task "$TASK_ID" \
+  --engineer "Ada" \
+  --baseline-source observed_paired_task \
+  --baseline-minutes 10 \
+  --tool-minutes 4 \
+  --baseline-files-pasted 5 \
+  --tool-files-pasted 1 \
+  --mcp-queries 3 \
+  --useful yes \
+  --decision-grade
+```
+
+Record week-2 retention:
+
+```bash
+repo-index pilot retain --engineer "Ada" --enabled yes --week2 --notes "still enabled"
+```
+
+Record a miss. Raw query text is hashed/length-only in the local log unless raw logging is explicitly enabled; use scrubbed fields for reviewable wording.
+
+```bash
+repo-index pilot miss \
+  --scrubbed-query "where is retry backoff configured" \
+  --expected-path src/retry.py \
+  --scrubbed-expected-text "def retry"
+```
+
+Generate a single-user report:
+
+```bash
+repo-index pilot report
+```
+
+Generate a cohort report from multiple exported local logs:
+
+```bash
+repo-index pilot report \
+  --usage-log ada.usage.jsonl \
+  --usage-log grace.usage.jsonl \
+  --usage-log linus.usage.jsonl
+```
+
+The report is numeric evidence only. Final expand/stop decisions still require manual review of severe setup, security, and trust issues.
+
+Add a miss to the golden eval set:
+
+```bash
+repo-index eval-add evals/golden.repo-index-mcp.jsonl \
+  --id pilot-001 \
+  --query "where is retry backoff configured" \
+  --expected-path src/retry.py \
+  --expected-text "def retry"
+```
+
 ## Task measurement template
 
 | Task ID | Engineer | Date | Repo(s) | Task class | Baseline source | Baseline minutes | Tool minutes | Baseline files pasted | Tool files pasted | MCP queries | Misses | Useful? | Decision-grade? | Notes |
 | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- | --- | --- | --- |
-| pilot-001 |  |  |  |  | observed paired task / prior comparable / estimate |  |  |  |  |  |  |  | yes/no |  |
+| pilot-001 |  |  |  |  | observed_paired_task / prior_comparable / estimate |  |  |  |  |  |  |  | yes/no |  |
 
 ## Timing protocol
 
@@ -48,11 +157,11 @@ Decision-grade rows require observed baseline/tool timings.
 - Count MCP queries used.
 - Record whether returned snippets changed the agent's next action.
 
-Baseline options:
+Baseline source values:
 
-- Best: same task class measured without `repo-index` before the pilot.
-- Good: paired comparable task in same repo area.
-- Weak: estimate only. Estimate-only rows are qualitative and do not count toward the 50% reduction metric.
+- `observed_paired_task`: same task class measured without `repo-index` before the pilot.
+- `prior_comparable`: paired comparable task in same repo area.
+- `estimate`: qualitative only. Estimate-only rows cannot be marked `--decision-grade` and do not count toward the 50% reduction metric.
 
 ## Weekly review
 
@@ -64,7 +173,7 @@ Baseline options:
 
 ## Pilot decision gate
 
-Expand beyond pilot only if all are true:
+`repo-index pilot report` computes the metric gate. It is numeric evidence, not a complete go/no-go decision. Expand beyond pilot only if metric gate passes and manual issue review passes:
 
 - At least 4 of 5 engineers activate.
 - At least 70% keep MCP enabled after week 2.

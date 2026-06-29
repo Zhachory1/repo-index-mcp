@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -12,6 +13,16 @@ from repo_index_mcp.engine import DEFAULT_DB_PATH, RepoIndex
 from repo_index_mcp.eval import format_report, load_golden_cases, run_recall_eval
 from repo_index_mcp.hooks import install_hooks
 from repo_index_mcp.repo import discover_repos
+from repo_index_mcp.secrets import looks_like_secret
+from repo_index_mcp.usage import (
+    build_report,
+    end_task,
+    log_search_event,
+    record_activation,
+    record_miss,
+    record_retention,
+    start_task,
+)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -32,8 +43,21 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "query":
         engine = RepoIndex(db_path=args.db)
+        start = time.monotonic()
         results = engine.query(
             args.query,
+            repo=args.repo,
+            path_prefix=args.path_prefix,
+            language=args.language,
+            k=args.k,
+        )
+        latency_ms = int((time.monotonic() - start) * 1000)
+        log_search_event(
+            tool="query",
+            query=args.query,
+            source="cli",
+            latency_ms=latency_ms,
+            results=results,
             repo=args.repo,
             path_prefix=args.path_prefix,
             language=args.language,
@@ -50,14 +74,34 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "get-symbol":
         engine = RepoIndex(db_path=args.db)
+        start = time.monotonic()
         result = engine.get_symbol(args.name, repo=args.repo)
+        latency_ms = int((time.monotonic() - start) * 1000)
         if result is None:
             print("null")
             print(
                 "No symbol found. Try `repo-index query <name>` or reindex the repo.",
                 file=sys.stderr,
             )
+            log_search_event(
+                tool="get-symbol",
+                query=args.name,
+                source="cli",
+                latency_ms=latency_ms,
+                results=[],
+                repo=args.repo,
+                k=1,
+            )
             return 1
+        log_search_event(
+            tool="get-symbol",
+            query=args.name,
+            source="cli",
+            latency_ms=latency_ms,
+            results=[result],
+            repo=args.repo,
+            k=1,
+        )
         print(json.dumps(asdict(result), indent=2))
         return 0
 
@@ -90,6 +134,13 @@ def main(argv: list[str] | None = None) -> int:
                 )
             )
         print(json.dumps([str(path) for path in installed], indent=2))
+        return 0
+
+    if args.command == "pilot":
+        return handle_pilot(args)
+
+    if args.command == "eval-add":
+        append_eval_case(args)
         return 0
 
     if args.command == "eval":
@@ -154,6 +205,18 @@ def build_parser() -> argparse.ArgumentParser:
     hooks.add_argument("--force", action="store_true")
     hooks.add_argument("--command-name", default="repo-index")
 
+    pilot = subparsers.add_parser("pilot", help="record/report local pilot proof")
+    add_pilot_args(pilot)
+
+    eval_add = subparsers.add_parser("eval-add", help="append a golden eval JSONL case")
+    eval_add.add_argument("golden_file", type=Path)
+    eval_add.add_argument("--id", required=True)
+    eval_add.add_argument("--query", required=True)
+    eval_add.add_argument("--expected-path", required=True)
+    eval_add.add_argument("--expected-text")
+    eval_add.add_argument("--expected-symbol")
+    eval_add.add_argument("--notes")
+
     eval_parser = subparsers.add_parser("eval", help="run Recall@K over a golden JSONL set")
     eval_parser.add_argument("golden_file", type=Path)
     eval_parser.add_argument("repo_path", type=Path)
@@ -172,6 +235,176 @@ def add_query_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--repo")
     parser.add_argument("--path-prefix")
     parser.add_argument("--language")
+
+
+def add_pilot_args(parser: argparse.ArgumentParser) -> None:
+    subparsers = parser.add_subparsers(dest="pilot_command", required=True)
+
+    start = subparsers.add_parser("start-task", help="start timing a pilot task")
+    start.add_argument("--engineer", required=True)
+    start.add_argument("--task", required=True)
+    start.add_argument("--task-class")
+    start.add_argument("--repo", action="append", default=[])
+
+    end = subparsers.add_parser("end-task", help="finish a pilot task")
+    end.add_argument("task_id")
+    end.add_argument("--engineer", required=True)
+    end.add_argument("--baseline-source", required=True)
+    end.add_argument("--baseline-minutes", type=float)
+    end.add_argument("--tool-minutes", type=float)
+    end.add_argument("--baseline-files-pasted", type=int)
+    end.add_argument("--tool-files-pasted", type=int)
+    end.add_argument("--mcp-queries", type=int)
+    end.add_argument("--useful", choices=["yes", "no"])
+    end.add_argument("--decision-grade", action="store_true")
+    end.add_argument("--notes")
+
+    activate = subparsers.add_parser("activate", help="record successful pilot activation")
+    activate.add_argument("--engineer", required=True)
+    activate.add_argument("--client", required=True)
+    activate.add_argument("--repo")
+    activate.add_argument("--doctor-ok", action="store_true")
+    activate.add_argument("--repo-indexed", action="store_true")
+    activate.add_argument("--tools-visible", action="store_true")
+    activate.add_argument("--list-repos-ok", action="store_true")
+    activate.add_argument("--search-code-ok", action="store_true")
+    activate.add_argument("--relevant-result", action="store_true")
+    activate.add_argument("--notes")
+
+    retain = subparsers.add_parser("retain", help="record whether pilot user kept MCP enabled")
+    retain.add_argument("--engineer", required=True)
+    retain.add_argument("--enabled", choices=["yes", "no"], required=True)
+    retain.add_argument("--week2", action="store_true")
+    retain.add_argument("--notes")
+
+    miss = subparsers.add_parser("miss", help="record a missed or weak query")
+    miss.add_argument("--raw-query")
+    miss.add_argument("--expected-path")
+    miss.add_argument("--expected-text")
+    miss.add_argument("--scrubbed-query", required=True)
+    miss.add_argument("--scrubbed-expected-text")
+    miss.add_argument("--notes")
+
+    report = subparsers.add_parser("report", help="summarize pilot usage and proof metrics")
+    report.add_argument("--usage-log", type=Path, action="append", default=[])
+
+
+def handle_pilot(args: argparse.Namespace) -> int:
+    if args.pilot_command == "start-task":
+        event = start_task(
+            engineer=args.engineer,
+            task=args.task,
+            task_class=args.task_class,
+            repos=args.repo,
+        )
+    elif args.pilot_command == "end-task":
+        if args.decision_grade:
+            if args.tool_minutes is None:
+                args.tool_minutes = infer_tool_minutes(args.task_id)
+            validate_decision_grade_args(args)
+        event = end_task(
+            task_id=args.task_id,
+            engineer=args.engineer,
+            baseline_source=args.baseline_source,
+            baseline_minutes=args.baseline_minutes,
+            tool_minutes=args.tool_minutes,
+            baseline_files_pasted=args.baseline_files_pasted,
+            tool_files_pasted=args.tool_files_pasted,
+            mcp_queries=args.mcp_queries,
+            useful=parse_optional_bool(args.useful),
+            decision_grade=args.decision_grade,
+            notes=args.notes,
+        )
+    elif args.pilot_command == "activate":
+        event = record_activation(
+            engineer=args.engineer,
+            client=args.client,
+            repo=args.repo,
+            doctor_ok=args.doctor_ok,
+            repo_indexed=args.repo_indexed,
+            tools_visible=args.tools_visible,
+            list_repos_ok=args.list_repos_ok,
+            search_code_ok=args.search_code_ok,
+            relevant_result=args.relevant_result,
+            notes=args.notes,
+        )
+    elif args.pilot_command == "retain":
+        event = record_retention(
+            engineer=args.engineer,
+            enabled=args.enabled == "yes",
+            week2=args.week2,
+            notes=args.notes,
+        )
+    elif args.pilot_command == "miss":
+        event = record_miss(
+            raw_query=args.raw_query,
+            expected_path=args.expected_path,
+            expected_text=args.expected_text,
+            scrubbed_query=args.scrubbed_query,
+            scrubbed_expected_text=args.scrubbed_expected_text,
+            notes=args.notes,
+        )
+    elif args.pilot_command == "report":
+        event = build_report(args.usage_log or None)
+    else:
+        raise ValueError(f"unknown pilot command: {args.pilot_command}")
+    print(json.dumps(event, indent=2))
+    return 0
+
+
+def infer_tool_minutes(task_id: str) -> float | None:
+    from repo_index_mcp.usage import read_events
+
+    start = next(
+        (event for event in reversed(read_events()) if event.get("task_id") == task_id),
+        None,
+    )
+    if start and start.get("event") == "task_start":
+        return round((time.time() - float(start["ts"])) / 60.0, 3)
+    return None
+
+
+def validate_decision_grade_args(args: argparse.Namespace) -> None:
+    if args.baseline_source not in {"observed_paired_task", "prior_comparable"}:
+        raise SystemExit(
+            "decision-grade baseline source must be observed_paired_task or prior_comparable"
+        )
+    if args.baseline_minutes is None or args.tool_minutes is None:
+        raise SystemExit("decision-grade tasks require --baseline-minutes and --tool-minutes")
+    if args.baseline_minutes <= 0 or args.tool_minutes < 0:
+        raise SystemExit("decision-grade task minutes must be non-negative and baseline > 0")
+    for name in ("baseline_files_pasted", "tool_files_pasted", "mcp_queries"):
+        value = getattr(args, name)
+        if value is not None and value < 0:
+            raise SystemExit(f"{name} cannot be negative")
+    if args.useful is None or args.mcp_queries is None:
+        raise SystemExit("decision-grade tasks require --useful and --mcp-queries")
+
+
+def append_eval_case(args: argparse.Namespace) -> None:
+    for field in (args.query, args.expected_text, args.expected_symbol, args.notes):
+        if field and looks_like_secret(field):
+            raise SystemExit("eval-add text looks like a secret; scrub before committing")
+    payload = {
+        "id": args.id,
+        "query": args.query,
+        "expected_path": args.expected_path,
+    }
+    if args.expected_text:
+        payload["expected_text"] = args.expected_text
+    if args.expected_symbol:
+        payload["expected_symbol"] = args.expected_symbol
+    if args.notes:
+        payload["notes"] = args.notes
+    args.golden_file.parent.mkdir(parents=True, exist_ok=True)
+    with args.golden_file.open("a", encoding="utf-8") as file:
+        file.write(json.dumps(payload, sort_keys=True) + "\n")
+
+
+def parse_optional_bool(value: str | None) -> bool | None:
+    if value is None:
+        return None
+    return value == "yes"
 
 
 def positive_int(value: str) -> int:

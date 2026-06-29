@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import time
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
 from repo_index_mcp.engine import DEFAULT_DB_PATH, RepoIndex
+from repo_index_mcp.usage import log_search_event
 
 
 def run_server(*, db_path: str | Path = DEFAULT_DB_PATH) -> None:
@@ -25,8 +27,20 @@ def run_server(*, db_path: str | Path = DEFAULT_DB_PATH) -> None:
         k: int = 10,
     ) -> list[dict[str, Any]]:
         """Search indexed code and return ranked snippets with file locations."""
+        start = time.monotonic()
         results = engine.query(
             query,
+            repo=repo,
+            path_prefix=path_prefix,
+            language=language,
+            k=k,
+        )
+        log_search_event(
+            tool="search_code",
+            query=query,
+            source="mcp",
+            latency_ms=int((time.monotonic() - start) * 1000),
+            results=results,
             repo=repo,
             path_prefix=path_prefix,
             language=language,
@@ -37,9 +51,28 @@ def run_server(*, db_path: str | Path = DEFAULT_DB_PATH) -> None:
     @mcp.tool()
     def get_symbol(name: str, repo: str | None = None) -> dict[str, Any] | None:
         """Look up a symbol from indexed metadata, falling back to search."""
+        start = time.monotonic()
         result = engine.get_symbol(name, repo=repo)
         if result is None:
+            log_search_event(
+                tool="get_symbol",
+                query=name,
+                source="mcp",
+                latency_ms=int((time.monotonic() - start) * 1000),
+                results=[],
+                repo=repo,
+                k=1,
+            )
             return None
+        log_search_event(
+            tool="get_symbol",
+            query=name,
+            source="mcp",
+            latency_ms=int((time.monotonic() - start) * 1000),
+            results=[result],
+            repo=repo,
+            k=1,
+        )
         return {
             "repo": result.repo,
             "path": result.path,

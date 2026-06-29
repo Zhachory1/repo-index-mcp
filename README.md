@@ -7,7 +7,7 @@ Local codebase retrieval tool for coding agents. It indexes committed code from 
 From GitHub with `pipx`:
 
 ```bash
-pipx install git+https://github.com/Zhachory1/repo-index-mcp.git@v0.1.2
+pipx install git+https://github.com/Zhachory1/repo-index-mcp.git@v0.1.3
 ```
 
 For development:
@@ -108,7 +108,7 @@ They preserve the selected DB path and must not fail git commands.
 - `docs/cli-reference.md` — command reference.
 - `docs/output-schema.md` — JSON fields.
 - `docs/evals.md` — eval authoring and gate.
-- `docs/pilot.md` — 5-engineer pilot measurement plan.
+- `docs/pilot.md` — 5-engineer pilot measurement plan and local reporting commands.
 - `docs/language-support.md` — parser/regex/window support matrix.
 - `docs/recipes.md` — common operations.
 - `docs/upgrade-uninstall.md` — lifecycle commands.
@@ -122,6 +122,16 @@ Run the eval gate:
 ```bash
 repo-index eval evals/golden.repo-index-mcp.jsonl . -k 10 --fail-under 0.85
 ```
+
+## Pilot proof
+
+Pilot task/activation/miss events are recorded in `~/.repo-index-mcp/usage.jsonl` without snippets. Passive query logging is opt-in with `REPO_INDEX_ENABLE_USAGE_LOG=1`. Use:
+
+```bash
+repo-index pilot report
+```
+
+See `docs/pilot.md` for activation, timing, miss capture, and decision gates.
 
 ## Retrieval behavior
 

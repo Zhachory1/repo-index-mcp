@@ -23,8 +23,19 @@ repo-index eval evals/golden.repo-index-mcp.jsonl . -k 10 --json
 repo-index eval evals/golden.repo-index-mcp.jsonl . -k 10 --fail-under 0.85
 ```
 
+Add a scrubbed/synthetic case from a pilot miss. Do not commit proprietary snippets, secrets, customer data, or raw private queries to shared eval files.
+
+
+```bash
+repo-index eval-add evals/golden.repo-index-mcp.jsonl \
+  --id pilot-001 \
+  --query "retry backoff" \
+  --expected-path src/retry.py \
+  --expected-text "def retry"
+```
+
 Rules:
 
-- Add misses from real pilot tasks.
+- Add scrubbed misses from real pilot tasks.
 - Do not delete hard cases just to raise Recall@10.
 - Keep query wording close to real user/agent language.
