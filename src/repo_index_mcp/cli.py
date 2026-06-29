@@ -10,7 +10,12 @@ from typing import Any
 
 from repo_index_mcp.doctor import run_doctor
 from repo_index_mcp.engine import DEFAULT_DB_PATH, RepoIndex
-from repo_index_mcp.eval import format_report, load_golden_cases, run_recall_eval
+from repo_index_mcp.eval import (
+    format_report,
+    load_golden_cases,
+    run_recall_diagnostics,
+    run_recall_eval,
+)
 from repo_index_mcp.hooks import install_hooks
 from repo_index_mcp.repo import discover_repos
 from repo_index_mcp.secrets import looks_like_secret
@@ -149,7 +154,19 @@ def main(argv: list[str] | None = None) -> int:
         if index_result.error_count:
             print(json.dumps(asdict(index_result), indent=2))
             return 1
-        report = run_recall_eval(engine, load_golden_cases(args.golden_file), k=args.k)
+        cases = load_golden_cases(args.golden_file)
+        if args.debug:
+            diagnostics = run_recall_diagnostics(
+                engine,
+                cases,
+                k=args.k,
+                repo=index_result.repo_id,
+            )
+            print(json.dumps(diagnostics, indent=2))
+            if args.fail_under is not None and diagnostics["recall_at_k"] < args.fail_under:
+                return 1
+            return 0
+        report = run_recall_eval(engine, cases, k=args.k, repo=index_result.repo_id)
         if args.json:
             print(json.dumps(report.to_dict(), indent=2))
         else:
@@ -223,6 +240,7 @@ def build_parser() -> argparse.ArgumentParser:
     eval_parser.add_argument("-k", type=positive_int, default=10)
     eval_parser.add_argument("--fail-under", type=float)
     eval_parser.add_argument("--json", action="store_true")
+    eval_parser.add_argument("--debug", action="store_true")
 
     serve = subparsers.add_parser("serve", help="run MCP server over stdio")
     serve.set_defaults(_serve=True)

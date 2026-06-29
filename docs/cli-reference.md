@@ -22,6 +22,7 @@ repo-index reindex /path/to/repo
 repo-index install-hooks /path/to/repo
 repo-index install-hooks ~/code --recursive
 repo-index eval evals/golden.repo-index-mcp.jsonl . -k 10 --fail-under 0.85
+repo-index eval evals/golden.repo-index-mcp.jsonl . -k 10 --debug > eval-debug.json
 repo-index eval-add evals/golden.repo-index-mcp.jsonl --id case-1 --query "retry" --expected-path src/retry.py
 repo-index pilot activate --engineer Ada --client mewrite --doctor-ok --repo-indexed --tools-visible --list-repos-ok --search-code-ok --relevant-result
 repo-index pilot start-task --engineer Ada --task "find retry implementation"

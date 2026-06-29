@@ -230,6 +230,30 @@ class SQLiteStorage:
         path_prefix: str | None = None,
         language: str | None = None,
     ) -> list[SearchResult]:
+        return [
+            item["result"]
+            for item in self.search_debug(
+                query_embedding=query_embedding,
+                embedding_model=embedding_model,
+                k=k,
+                query_text=query_text,
+                repo=repo,
+                path_prefix=path_prefix,
+                language=language,
+            )
+        ]
+
+    def search_debug(
+        self,
+        *,
+        query_embedding: list[float],
+        embedding_model: str,
+        k: int | None,
+        query_text: str,
+        repo: str | None = None,
+        path_prefix: str | None = None,
+        language: str | None = None,
+    ) -> list[dict[str, object]]:
         where = ["embedding_model = ?"]
         params: list[str] = [embedding_model]
         if repo:
@@ -258,38 +282,136 @@ class SQLiteStorage:
             FROM chunks
             WHERE {' AND '.join(where)}
         """
-        results: list[SearchResult] = []
+        rows: list[dict[str, object]] = []
         with self._connect() as conn:
             for row in conn.execute(sql, params):
                 embedding = json.loads(row[5])
                 vector_score = cosine_similarity(query_embedding, embedding)
-                score = adjusted_hybrid_score(
+                parts = score_breakdown(
                     query_text=query_text,
                     vector_score=vector_score,
                     path=row[1],
                     content=row[4],
                     symbol_name=row[7],
                 )
-                results.append(
-                    SearchResult(
-                        repo=row[0],
-                        path=row[1],
-                        start_line=row[2],
-                        end_line=row[3],
-                        snippet=row[4],
-                        score=score,
-                        language=row[6],
-                        symbol_name=row[7],
-                        symbol_kind=row[8],
-                        symbol_line=row[9],
-                        symbol_confidence=row[10],
-                    )
+                result = SearchResult(
+                    repo=row[0],
+                    path=row[1],
+                    start_line=row[2],
+                    end_line=row[3],
+                    snippet=row[4],
+                    score=float(parts["score"]),
+                    language=row[6],
+                    symbol_name=row[7],
+                    symbol_kind=row[8],
+                    symbol_line=row[9],
+                    symbol_confidence=row[10],
                 )
+                rows.append({"result": result, "score": parts})
 
-        results.sort(key=search_sort_key, reverse=True)
+        rows.sort(key=lambda item: search_sort_key(item["result"]), reverse=True)
+        if k is None:
+            return rows
         if wants_docs_query(query_text):
-            return results[:k]
-        return diversify_results(results, k)
+            return rows[:k]
+        selected = diversify_results([item["result"] for item in rows], k)
+        debug_by_result_id = {id(item["result"]): item for item in rows}
+        return [debug_by_result_id[id(result)] for result in selected]
+
+    def expected_path_debug(
+        self,
+        *,
+        query_embedding: list[float],
+        embedding_model: str,
+        query_text: str,
+        expected_path: str,
+        expected_text: str | None = None,
+        repo: str | None = None,
+    ) -> dict[str, object]:
+        best_score = None
+        best_parts = None
+        best_text_match = False
+        path_found = False
+        expected_text_lower = expected_text.lower() if expected_text else None
+        for row in self._iter_score_rows(
+            query_embedding=query_embedding,
+            embedding_model=embedding_model,
+            query_text=query_text,
+            repo=repo,
+        ):
+            if row["path"] != expected_path:
+                continue
+            path_found = True
+            text_match = (
+                True
+                if expected_text_lower is None
+                else expected_text_lower in str(row["content"]).lower()
+            )
+            if best_score is None or (text_match, row["score"]["score"]) > (
+                best_text_match,
+                best_score,
+            ):
+                best_score = row["score"]["score"]
+                best_parts = row["score"]
+                best_text_match = text_match
+        if best_score is None:
+            return {
+                "expected_found_in_index": False,
+                "expected_path_found_in_index": path_found,
+                "expected_best_rank": None,
+                "expected_best_score_parts": None,
+                "expected_text_match": None,
+            }
+        better_count = 0
+        for row in self._iter_score_rows(
+            query_embedding=query_embedding,
+            embedding_model=embedding_model,
+            query_text=query_text,
+            repo=repo,
+        ):
+            if row["score"]["score"] > best_score:
+                better_count += 1
+        return {
+            "expected_found_in_index": best_text_match if expected_text_lower else path_found,
+            "expected_path_found_in_index": path_found,
+            "expected_best_rank": better_count + 1,
+            "expected_best_score_parts": best_parts,
+            "expected_text_match": best_text_match if expected_text_lower else None,
+        }
+
+    def _iter_score_rows(
+        self,
+        *,
+        query_embedding: list[float],
+        embedding_model: str,
+        query_text: str,
+        repo: str | None = None,
+    ):
+        where = ["embedding_model = ?"]
+        params = [embedding_model]
+        if repo:
+            where.append("(repo_id = ? OR repo_path = ?)")
+            params.extend([repo, repo])
+        sql = f"""
+            SELECT path, content, embedding, symbol_name
+            FROM chunks
+            WHERE {' AND '.join(where)}
+        """
+        with self._connect() as conn:
+            for path, content, embedding_json, symbol_name in conn.execute(sql, params):
+                embedding = json.loads(embedding_json)
+                vector_score = cosine_similarity(query_embedding, embedding)
+                yield {
+                    "path": path,
+                    "content": content,
+                    "score": score_breakdown(
+                        query_text=query_text,
+                        vector_score=vector_score,
+                        path=path,
+                        content=content,
+                        symbol_name=symbol_name,
+                    ),
+                }
 
     def find_symbol(
         self,
@@ -663,14 +785,41 @@ def adjusted_hybrid_score(
     content: str,
     symbol_name: str | None,
 ) -> float:
-    score = hybrid_score(
-        query_text=query_text,
-        vector_score=vector_score,
-        path=path,
-        content=content,
-        symbol_name=symbol_name,
+    return float(
+        score_breakdown(
+            query_text=query_text,
+            vector_score=vector_score,
+            path=path,
+            content=content,
+            symbol_name=symbol_name,
+        )["score"]
     )
-    return score * path_rank_multiplier(query_text, path)
+
+
+def score_breakdown(
+    *,
+    query_text: str,
+    vector_score: float,
+    path: str,
+    content: str,
+    symbol_name: str | None,
+) -> dict[str, float]:
+    normalized_vector = max(0.0, min(1.0, (vector_score + 1.0) / 2.0))
+    lexical = token_overlap(query_text, content)
+    symbol = symbol_match_score(query_text, symbol_name)
+    path_score = token_overlap(query_text, path.replace("/", " ").replace(".", " "))
+    base = (0.60 * normalized_vector) + (0.24 * lexical) + (0.09 * symbol) + (0.07 * path_score)
+    multiplier = path_rank_multiplier(query_text, path)
+    return {
+        "raw_vector": vector_score,
+        "normalized_vector": normalized_vector,
+        "lexical": lexical,
+        "symbol": symbol,
+        "path": path_score,
+        "path_multiplier": multiplier,
+        "base": base,
+        "score": base * multiplier,
+    }
 
 
 def path_rank_multiplier(query_text: str, path: str) -> float:

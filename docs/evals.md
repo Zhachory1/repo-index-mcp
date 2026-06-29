@@ -20,6 +20,7 @@ Run:
 ```bash
 repo-index eval evals/golden.repo-index-mcp.jsonl . -k 10
 repo-index eval evals/golden.repo-index-mcp.jsonl . -k 10 --json
+repo-index eval evals/golden.repo-index-mcp.jsonl . -k 10 --debug > eval-debug.json
 repo-index eval evals/golden.repo-index-mcp.jsonl . -k 10 --fail-under 0.85
 ```
 
@@ -33,6 +34,8 @@ repo-index eval-add evals/golden.repo-index-mcp.jsonl \
   --expected-path src/retry.py \
   --expected-text "def retry"
 ```
+
+Debug output includes per-case top results, score components, docs/generated counts, duplicate path counts, and miss diagnostics.
 
 Rules:
 

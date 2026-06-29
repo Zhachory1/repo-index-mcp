@@ -235,6 +235,57 @@ class RepoIndex:
             for result in results
         ]
 
+    def query_debug(
+        self,
+        query: str,
+        *,
+        repo: str | None = None,
+        path_prefix: str | None = None,
+        language: str | None = None,
+        k: int | None = 10,
+    ) -> list[dict[str, object]]:
+        query_embedding = self.embedding_provider.embed(query)
+        debug_rows = self.storage.search_debug(
+            query_embedding=query_embedding,
+            embedding_model=self.embedding_provider.model_id,
+            k=k,
+            query_text=query,
+            repo=repo,
+            path_prefix=path_prefix,
+            language=language,
+        )
+        repo_ids = {row["result"].repo for row in debug_rows}  # type: ignore[union-attr]
+        repo_state = {str(item["repo_id"]): item for item in self._repo_status(repo_ids)}
+        output: list[dict[str, object]] = []
+        for row in debug_rows:
+            result = row["result"]
+            enriched = replace(
+                result,
+                is_stale=bool(repo_state.get(result.repo, {}).get("is_stale", True)),
+                has_dirty_tracked_files=bool(
+                    repo_state.get(result.repo, {}).get("has_dirty_tracked_files", False)
+                ),
+            )
+            output.append({"result": enriched, "score": row["score"]})
+        return output
+
+    def expected_path_debug(
+        self,
+        query: str,
+        *,
+        expected_path: str,
+        expected_text: str | None = None,
+        repo: str | None = None,
+    ) -> dict[str, object]:
+        return self.storage.expected_path_debug(
+            query_embedding=self.embedding_provider.embed(query),
+            embedding_model=self.embedding_provider.model_id,
+            query_text=query,
+            expected_path=expected_path,
+            expected_text=expected_text,
+            repo=repo,
+        )
+
     def get_symbol(self, name: str, *, repo: str | None = None) -> SearchResult | None:
         result = self.storage.find_symbol(
             name=name,
