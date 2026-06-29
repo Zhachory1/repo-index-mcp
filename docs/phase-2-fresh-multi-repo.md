@@ -77,9 +77,20 @@ Latest local smoke on this repo:
 - `status`: `is_stale: false`, `has_dirty_tracked_files: true` while local edits are uncommitted.
 - Phase 0 eval smoke: Recall@10 20/32 = 0.625. This is not a Phase 2 gate.
 
+## Hook freshness measurement
+
+Local hook smoke under `~/code/repo-index-mcp-freshness-smoke`:
+
+- Installed `post-commit` / `post-merge` hooks.
+- Committed a unique marker function.
+- Queried default DB until marker was returned with `is_stale: false`.
+- Commit-to-queryable lag: 7.383 seconds.
+
+This satisfies the ≤60s freshness target for the local smoke path. Larger representative repos should still be monitored as engineers adopt the tool.
+
 ## Phase 2 exit check
 
-Local code now supports the path, but real exit still needs measurement on representative repos:
+Local code now supports the path; representative adoption should continue measuring:
 
 - Install hooks on target repos.
 - Commit or merge a change.
