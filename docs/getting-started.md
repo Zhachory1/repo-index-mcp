@@ -3,7 +3,7 @@
 ## Install
 
 ```bash
-pipx install git+https://github.com/Zhachory1/repo-index-mcp.git@v0.1.1
+pipx install git+https://github.com/Zhachory1/repo-index-mcp.git@v0.1.2
 repo-index doctor
 ```
 

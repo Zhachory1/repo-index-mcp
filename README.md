@@ -7,7 +7,7 @@ Local codebase retrieval tool for coding agents. It indexes committed code from 
 From GitHub with `pipx`:
 
 ```bash
-pipx install git+https://github.com/Zhachory1/repo-index-mcp.git@v0.1.1
+pipx install git+https://github.com/Zhachory1/repo-index-mcp.git@v0.1.2
 ```
 
 For development:
