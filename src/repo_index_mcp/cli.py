@@ -115,6 +115,21 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(engine.list_repos(), indent=2))
         return 0
 
+    if args.command == "backfill-vectors":
+        engine = RepoIndex(db_path=args.db)
+        start = time.monotonic()
+        count = engine.storage.backfill_vectors()
+        print(
+            json.dumps(
+                {
+                    "vectors_indexed": count,
+                    "duration_ms": int((time.monotonic() - start) * 1000),
+                },
+                indent=2,
+            )
+        )
+        return 0
+
     if args.command == "doctor":
         result, exit_code = run_doctor(args.db)
         print(json.dumps(result, indent=2))
@@ -209,6 +224,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     status = subparsers.add_parser("status", help="list indexed repos")
     status.set_defaults(_status=True)
+
+    backfill_vectors_parser = subparsers.add_parser(
+        "backfill-vectors",
+        help="build local sqlite-vec candidate index for existing chunks",
+    )
+    backfill_vectors_parser.set_defaults(_backfill_vectors=True)
 
     doctor = subparsers.add_parser("doctor", help="check local setup and MCP readiness")
     doctor.set_defaults(_doctor=True)

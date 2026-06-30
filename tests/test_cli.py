@@ -261,6 +261,12 @@ def test_pilot_report_skips_malformed_jsonl(
     assert '"valid_decision_grade_tasks": 0' in output
 
 
+def test_backfill_vectors_cli_empty_db(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
+    assert main(["--db", str(tmp_path / "index.sqlite"), "backfill-vectors"]) == 0
+
+    assert "vectors_indexed" in capsys.readouterr().out
+
+
 def test_eval_add_rejects_secret_text(tmp_path: Path) -> None:
     golden = tmp_path / "golden.jsonl"
 

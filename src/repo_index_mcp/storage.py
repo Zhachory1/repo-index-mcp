@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sqlite3
 from collections.abc import Iterable, Sequence
 from datetime import UTC, datetime
@@ -12,6 +13,10 @@ from repo_index_mcp.models import Chunk, SearchResult
 
 BUSY_TIMEOUT_MS = 5000
 FTS_INDEX_VERSION = "fts-v1"
+DEFAULT_CANDIDATE_THRESHOLD = 100_000
+DEFAULT_VECTOR_CANDIDATE_LIMIT = 2000
+DEFAULT_FTS_CANDIDATE_LIMIT = 200
+DEFAULT_UNION_FTS_CANDIDATE_LIMIT = 2000
 QUERY_EXPANSIONS = {
     "retry": {"backoff", "attempt", "attempts"},
     "backoff": {"retry", "attempt", "attempts"},
@@ -65,6 +70,7 @@ class SQLiteStorage:
             old_ids = [row[0] for row in rows]
             for old_id in old_ids:
                 delete_fts_for_repo(conn, old_id)
+                delete_vectors_for_repo(conn, old_id)
                 conn.execute("DELETE FROM chunks WHERE repo_id = ?", (old_id,))
                 conn.execute("DELETE FROM indexed_files WHERE repo_id = ?", (old_id,))
                 conn.execute("DELETE FROM repos WHERE repo_id = ?", (old_id,))
@@ -160,6 +166,7 @@ class SQLiteStorage:
         rows = chunk_rows(chunks, embeddings, commit_sha, embedding_model, chunker_version)
         with self._connect() as conn:
             delete_fts_for_repo(conn, repo_id)
+            delete_vectors_for_repo(conn, repo_id)
             conn.execute("DELETE FROM chunks WHERE repo_id = ?", (repo_id,))
             conn.execute("DELETE FROM indexed_files WHERE repo_id = ?", (repo_id,))
             insert_chunks(conn, rows)
@@ -193,6 +200,7 @@ class SQLiteStorage:
         indexed_at = now_iso()
         with self._connect() as conn:
             delete_fts_for_path(conn, repo_id, path)
+            delete_vectors_for_path(conn, repo_id, path)
             conn.execute("DELETE FROM chunks WHERE repo_id = ? AND path = ?", (repo_id, path))
             insert_chunks(conn, rows)
             conn.execute(
@@ -232,6 +240,7 @@ class SQLiteStorage:
     def clear_repo(self, *, repo_id: str) -> None:
         with self._connect() as conn:
             delete_fts_for_repo(conn, repo_id)
+            delete_vectors_for_repo(conn, repo_id)
             conn.execute("DELETE FROM chunks WHERE repo_id = ?", (repo_id,))
             conn.execute("DELETE FROM indexed_files WHERE repo_id = ?", (repo_id,))
 
@@ -242,6 +251,7 @@ class SQLiteStorage:
             deleted_chunks = 0
             for path in paths:
                 delete_fts_for_path(conn, repo_id, path)
+                delete_vectors_for_path(conn, repo_id, path)
                 cursor = conn.execute(
                     "DELETE FROM chunks WHERE repo_id = ? AND path = ?",
                     (repo_id, path),
@@ -260,6 +270,10 @@ class SQLiteStorage:
                 (repo_id,),
             ).fetchone()
         return int(row[0])
+
+    def backfill_vectors(self) -> int:
+        with self._connect() as conn:
+            return backfill_vectors(conn)
 
     def search(
         self,
@@ -296,20 +310,34 @@ class SQLiteStorage:
         path_prefix: str | None = None,
         language: str | None = None,
     ) -> list[dict[str, object]]:
-        where = ["embedding_model = ?"]
+        where = ["c.embedding_model = ?"]
         params: list[str] = [embedding_model]
         if repo:
-            where.append("(repo_id = ? OR repo_path = ?)")
+            where.append("(c.repo_id = ? OR c.repo_path = ?)")
             params.extend([repo, repo])
         if path_prefix:
-            where.append("path LIKE ?")
+            where.append("c.path LIKE ?")
             params.append(f"{path_prefix}%")
         if language:
-            where.append("language = ?")
+            where.append("c.language = ?")
             params.append(language)
 
         rows: list[dict[str, object]] = []
         with self._connect() as conn:
+            union_preflight = should_try_candidate_union(
+                conn,
+                query_text=query_text,
+                embedding_model=embedding_model,
+                repo=repo,
+                path_prefix=path_prefix,
+                language=language,
+                k=k,
+            )
+            fts_limit = (
+                DEFAULT_UNION_FTS_CANDIDATE_LIMIT
+                if union_preflight
+                else DEFAULT_FTS_CANDIDATE_LIMIT
+            )
             bm25_scores = fts_scores(
                 conn,
                 query_text=query_text,
@@ -317,47 +345,77 @@ class SQLiteStorage:
                 repo=repo,
                 path_prefix=path_prefix,
                 language=language,
+                limit=fts_limit,
             )
+            vector_candidate_scores = (
+                vector_scores(
+                    conn,
+                    query_embedding=query_embedding,
+                    embedding_model=embedding_model,
+                    repo=repo,
+                    path_prefix=path_prefix,
+                    language=language,
+                )
+                if union_preflight
+                else {}
+            )
+            from_clause = "chunks c"
+            if should_use_candidate_union(
+                vector_scores=vector_candidate_scores,
+                bm25_scores=bm25_scores,
+                k=k,
+            ):
+                candidate_rowids = set(vector_candidate_scores) | set(bm25_scores)
+                conn.execute(
+                    "CREATE TEMP TABLE IF NOT EXISTS candidate_rowids(rowid INTEGER PRIMARY KEY)"
+                )
+                conn.execute("DELETE FROM candidate_rowids")
+                conn.executemany(
+                    "INSERT OR IGNORE INTO candidate_rowids(rowid) VALUES (?)",
+                    [(rowid,) for rowid in candidate_rowids],
+                )
+                from_clause = "candidate_rowids ci CROSS JOIN chunks c ON c.rowid = ci.rowid"
             sql = f"""
                 SELECT
-                    chunk_id,
-                    repo_id,
-                    path,
-                    start_line,
-                    end_line,
-                    content,
-                    embedding,
-                    language,
-                    symbol_name,
-                    symbol_kind,
-                    symbol_line,
-                    symbol_confidence
-                FROM chunks
+                    c.rowid,
+                    c.chunk_id,
+                    c.repo_id,
+                    c.path,
+                    c.start_line,
+                    c.end_line,
+                    c.content,
+                    c.embedding,
+                    c.language,
+                    c.symbol_name,
+                    c.symbol_kind,
+                    c.symbol_line,
+                    c.symbol_confidence
+                FROM {from_clause}
                 WHERE {' AND '.join(where)}
             """
             for row in conn.execute(sql, params):
-                embedding = json.loads(row[6])
+                embedding = json.loads(row[7])
                 vector_score = cosine_similarity(query_embedding, embedding)
                 parts = score_breakdown(
                     query_text=query_text,
                     vector_score=vector_score,
-                    path=row[2],
-                    content=row[5],
-                    symbol_name=row[8],
+                    path=row[3],
+                    content=row[6],
+                    symbol_name=row[9],
                     bm25_score=bm25_scores.get(row[0], 0.0),
                 )
                 result = SearchResult(
-                    repo=row[1],
-                    path=row[2],
-                    start_line=row[3],
-                    end_line=row[4],
-                    snippet=row[5],
+                    repo=row[2],
+                    path=row[3],
+                    start_line=row[4],
+                    end_line=row[5],
+                    snippet=row[6],
                     score=float(parts["score"]),
-                    language=row[7],
-                    symbol_name=row[8],
-                    symbol_kind=row[9],
-                    symbol_line=row[10],
-                    symbol_confidence=row[11],
+                    language=row[8],
+                    symbol_name=row[9],
+                    symbol_kind=row[10],
+                    symbol_line=row[11],
+                    symbol_confidence=row[12],
                 )
                 rows.append({"result": result, "score": parts})
 
@@ -445,7 +503,7 @@ class SQLiteStorage:
             where.append("(repo_id = ? OR repo_path = ?)")
             params.extend([repo, repo])
         sql = f"""
-            SELECT chunk_id, path, content, embedding, symbol_name
+            SELECT rowid, path, content, embedding, symbol_name
             FROM chunks
             WHERE {' AND '.join(where)}
         """
@@ -456,7 +514,7 @@ class SQLiteStorage:
                 embedding_model=embedding_model,
                 repo=repo,
             )
-            for chunk_id, path, content, embedding_json, symbol_name in conn.execute(sql, params):
+            for rowid, path, content, embedding_json, symbol_name in conn.execute(sql, params):
                 embedding = json.loads(embedding_json)
                 vector_score = cosine_similarity(query_embedding, embedding)
                 yield {
@@ -468,7 +526,7 @@ class SQLiteStorage:
                         path=path,
                         content=content,
                         symbol_name=symbol_name,
-                        bm25_score=bm25_scores.get(chunk_id, 0.0),
+                        bm25_score=bm25_scores.get(rowid, 0.0),
                     ),
                 }
 
@@ -824,6 +882,7 @@ def insert_chunks(conn: sqlite3.Connection, rows: Sequence[tuple[object, ...]]) 
         rows,
     )
     insert_fts_rows(conn, rows)
+    insert_vector_rows(conn, rows)
 
 
 def ensure_fts_table(conn: sqlite3.Connection) -> bool:
@@ -942,6 +1001,258 @@ def backfill_fts(conn: sqlite3.Connection, batch_size: int = 1000) -> None:
 
 def normalized_fts_text(text: str) -> str:
     return " ".join(tokenize_code(text))
+
+
+def load_sqlite_vec(conn: sqlite3.Connection):  # type: ignore[no-untyped-def]
+    try:
+        import sqlite_vec
+
+        conn.enable_load_extension(True)
+        sqlite_vec.load(conn)
+        return sqlite_vec
+    except Exception:
+        return None
+
+
+def ensure_vector_table(
+    conn: sqlite3.Connection,
+    dimensions: int,
+    *,
+    rebuild_on_mismatch: bool = False,
+) -> bool:
+    sqlite_vec = load_sqlite_vec(conn)
+    if sqlite_vec is None:
+        return False
+    current_dimensions = meta_value(conn, "vector_dimensions")
+    if vector_table_incompatible(conn):
+        if not rebuild_on_mismatch:
+            return False
+        conn.execute("DROP TABLE IF EXISTS chunk_vectors")
+        set_meta_value(conn, "vector_dimensions", str(dimensions))
+    elif current_dimensions and int(current_dimensions) != dimensions:
+        if not rebuild_on_mismatch:
+            return False
+        conn.execute("DROP TABLE IF EXISTS chunk_vectors")
+        set_meta_value(conn, "vector_dimensions", str(dimensions))
+    elif not current_dimensions:
+        set_meta_value(conn, "vector_dimensions", str(dimensions))
+    conn.execute(
+        f"""
+        CREATE VIRTUAL TABLE IF NOT EXISTS chunk_vectors USING vec0(
+            embedding float[{dimensions}],
+            chunk_id text,
+            repo_id text
+        )
+        """
+    )
+    return True
+
+
+def vector_table_exists(conn: sqlite3.Connection) -> bool:
+    return (
+        conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='chunk_vectors'"
+        ).fetchone()
+        is not None
+    )
+
+
+def vector_table_incompatible(conn: sqlite3.Connection) -> bool:
+    if not vector_table_exists(conn):
+        return False
+    try:
+        columns = {item[1] for item in conn.execute("PRAGMA table_info(chunk_vectors)")}
+    except sqlite3.OperationalError:
+        return True
+    return not {"chunk_id", "repo_id"}.issubset(columns)
+
+
+def delete_vectors_for_repo(conn: sqlite3.Connection, repo_id: str) -> None:
+    if not vector_table_exists(conn) or load_sqlite_vec(conn) is None:
+        return
+    try:
+        conn.execute(
+            """
+            DELETE FROM chunk_vectors
+            WHERE rowid IN (SELECT rowid FROM chunks WHERE repo_id = ?)
+            """,
+            (repo_id,),
+        )
+    except sqlite3.OperationalError:
+        return
+
+
+def delete_vectors_for_path(conn: sqlite3.Connection, repo_id: str, path: str) -> None:
+    if not vector_table_exists(conn) or load_sqlite_vec(conn) is None:
+        return
+    try:
+        conn.execute(
+            """
+            DELETE FROM chunk_vectors
+            WHERE rowid IN (SELECT rowid FROM chunks WHERE repo_id = ? AND path = ?)
+            """,
+            (repo_id, path),
+        )
+    except sqlite3.OperationalError:
+        return
+
+
+def insert_vector_rows(conn: sqlite3.Connection, rows: Sequence[tuple[object, ...]]) -> None:
+    if not rows or not should_maintain_vectors(conn):
+        return
+    embeddings = [json.loads(str(row[14])) for row in rows]
+    dimensions = len(embeddings[0]) if embeddings else 0
+    sqlite_vec = load_sqlite_vec(conn)
+    if (
+        sqlite_vec is None
+        or not dimensions
+        or not ensure_vector_table(conn, dimensions, rebuild_on_mismatch=False)
+    ):
+        clear_vector_coverage(conn, rows)
+        return
+    chunk_ids = [str(row[0]) for row in rows]
+    placeholders = ", ".join("?" for _chunk_id in chunk_ids)
+    rowids = {
+        chunk_id: rowid
+        for rowid, chunk_id in conn.execute(
+            f"SELECT rowid, chunk_id FROM chunks WHERE chunk_id IN ({placeholders})",
+            chunk_ids,
+        )
+    }
+    try:
+        conn.executemany(
+            "INSERT INTO chunk_vectors(rowid, embedding, chunk_id, repo_id) VALUES (?, ?, ?, ?)",
+            [
+                (rowids[str(row[0])], sqlite_vec.serialize_float32(embedding), row[0], row[1])
+                for row, embedding in zip(rows, embeddings, strict=True)
+                if str(row[0]) in rowids
+            ],
+        )
+    except sqlite3.OperationalError:
+        clear_vector_coverage(conn, rows)
+        return
+
+
+def should_maintain_vectors(conn: sqlite3.Connection) -> bool:
+    if os.environ.get("REPO_INDEX_MAINTAIN_VECTORS") == "1":
+        return True
+    row = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='chunk_vectors'"
+    ).fetchone()
+    return row is not None
+
+
+def vector_count(conn: sqlite3.Connection) -> int:
+    try:
+        load_sqlite_vec(conn)
+        return int(conn.execute("SELECT COUNT(*) FROM chunk_vectors").fetchone()[0])
+    except sqlite3.OperationalError:
+        return 0
+
+
+def insert_vector_backfill_rows(
+    conn: sqlite3.Connection,
+    rows: Sequence[tuple[object, ...]],
+) -> int:
+    if not rows:
+        return 0
+    embeddings = [json.loads(str(row[3])) for row in rows]
+    dimensions = len(embeddings[0]) if embeddings else 0
+    sqlite_vec = load_sqlite_vec(conn)
+    if (
+        sqlite_vec is None
+        or not dimensions
+        or not ensure_vector_table(conn, dimensions, rebuild_on_mismatch=True)
+    ):
+        return 0
+    values = [
+        (int(row[0]), sqlite_vec.serialize_float32(embedding), row[1], row[2])
+        for row, embedding in zip(rows, embeddings, strict=True)
+    ]
+    try:
+        conn.executemany(
+            "INSERT INTO chunk_vectors(rowid, embedding, chunk_id, repo_id) VALUES (?, ?, ?, ?)",
+            values,
+        )
+    except sqlite3.OperationalError:
+        return 0
+    return len(values)
+
+
+def backfill_vectors(conn: sqlite3.Connection, batch_size: int = 1000) -> int:
+    first = conn.execute("SELECT embedding FROM chunks LIMIT 1").fetchone()
+    if first is None:
+        return 0
+    dimensions = len(json.loads(first[0]))
+    if not ensure_vector_table(conn, dimensions, rebuild_on_mismatch=True):
+        return 0
+    try:
+        conn.execute("DELETE FROM chunk_vectors")
+    except sqlite3.OperationalError:
+        return 0
+    total = 0
+    last_rowid = 0
+    while True:
+        rows = conn.execute(
+            """
+            SELECT c.rowid, c.chunk_id, c.repo_id, c.embedding
+            FROM chunks c
+            WHERE c.rowid > ?
+            ORDER BY c.rowid
+            LIMIT ?
+            """,
+            (last_rowid, batch_size),
+        ).fetchall()
+        if not rows:
+            mark_vector_coverage_complete_if_counts_match(conn)
+            return total
+        last_rowid = int(rows[-1][0])
+        total += insert_vector_backfill_rows(conn, rows)
+
+
+def vector_scores(
+    conn: sqlite3.Connection,
+    *,
+    query_embedding: list[float],
+    embedding_model: str,
+    repo: str | None = None,
+    path_prefix: str | None = None,
+    language: str | None = None,
+    limit: int = DEFAULT_VECTOR_CANDIDATE_LIMIT,
+) -> dict[int, float]:
+    sqlite_vec = load_sqlite_vec(conn)
+    if sqlite_vec is None or not ensure_vector_table(conn, len(query_embedding)):
+        return {}
+    where = ["v.embedding MATCH ?", "k = ?", "c.embedding_model = ?"]
+    params: list[object] = [sqlite_vec.serialize_float32(query_embedding), limit, embedding_model]
+    if repo:
+        where.append("(c.repo_id = ? OR c.repo_path = ?)")
+        params.extend([repo, repo])
+    if path_prefix:
+        where.append("c.path LIKE ?")
+        params.append(f"{path_prefix}%")
+    if language:
+        where.append("c.language = ?")
+        params.append(language)
+    sql = f"""
+        SELECT v.rowid, v.distance
+        FROM chunk_vectors v
+        JOIN chunks c ON c.rowid = v.rowid AND c.chunk_id = v.chunk_id
+        WHERE {' AND '.join(where)}
+        ORDER BY v.distance
+    """
+    try:
+        rows = conn.execute(sql, params).fetchall()
+    except sqlite3.OperationalError:
+        return {}
+    if not rows:
+        return {}
+    distances = [float(row[1]) for row in rows]
+    best = min(distances)
+    worst = max(distances)
+    if best == worst:
+        return {int(row[0]): 1.0 for row in rows}
+    return {int(row[0]): (worst - float(row[1])) / (worst - best) for row in rows}
 
 
 def chunk_id_for(chunk: Chunk) -> str:
@@ -1090,6 +1401,99 @@ def is_generated_path(path: str) -> bool:
     )
 
 
+def should_try_candidate_union(
+    conn: sqlite3.Connection,
+    *,
+    query_text: str,
+    embedding_model: str,
+    repo: str | None,
+    path_prefix: str | None,
+    language: str | None,
+    k: int | None,
+) -> bool:
+    if os.environ.get("REPO_INDEX_ENABLE_CANDIDATE_UNION") != "1":
+        return False
+    if k is None or wants_docs_query(query_text):
+        return False
+    if repo or path_prefix or language:
+        return False
+    if estimated_indexed_chunks(conn) < candidate_threshold():
+        return False
+    return vector_coverage_complete(conn, embedding_model=embedding_model)
+
+
+def should_use_candidate_union(
+    *,
+    vector_scores: dict[int, float],
+    bm25_scores: dict[int, float],
+    k: int | None,
+) -> bool:
+    if k is None or not vector_scores:
+        return False
+    return len(set(vector_scores) | set(bm25_scores)) >= max(50, k * 10)
+
+
+def estimated_indexed_chunks(conn: sqlite3.Connection) -> int:
+    row = conn.execute("SELECT COALESCE(SUM(chunk_count), 0) FROM indexed_files").fetchone()
+    return int(row[0])
+
+
+def vector_coverage_complete(conn: sqlite3.Connection, *, embedding_model: str) -> bool:
+    return meta_value(conn, f"vector_coverage:{embedding_model}") == "complete"
+
+
+def mark_vector_coverage_complete_if_counts_match(conn: sqlite3.Connection) -> None:
+    rows = conn.execute("SELECT DISTINCT embedding_model FROM chunks").fetchall()
+    for (embedding_model,) in rows:
+        if vector_coverage_count(conn, embedding_model=embedding_model) == matching_chunk_count(
+            conn,
+            embedding_model=embedding_model,
+        ):
+            set_meta_value(conn, f"vector_coverage:{embedding_model}", "complete")
+        else:
+            set_meta_value(conn, f"vector_coverage:{embedding_model}", "incomplete")
+
+
+def clear_vector_coverage(conn: sqlite3.Connection, rows: Sequence[tuple[object, ...]]) -> None:
+    for embedding_model in {str(row[15]) for row in rows if len(row) > 15}:
+        set_meta_value(conn, f"vector_coverage:{embedding_model}", "incomplete")
+
+
+def vector_coverage_count(conn: sqlite3.Connection, *, embedding_model: str) -> int:
+    try:
+        load_sqlite_vec(conn)
+        return int(
+            conn.execute(
+                """
+                SELECT COUNT(*)
+                FROM chunk_vectors v
+                JOIN chunks c ON c.rowid = v.rowid AND c.chunk_id = v.chunk_id
+                WHERE c.embedding_model = ?
+                """,
+                (embedding_model,),
+            ).fetchone()[0]
+        )
+    except sqlite3.OperationalError:
+        return 0
+
+
+def matching_chunk_count(conn: sqlite3.Connection, *, embedding_model: str) -> int:
+    return int(
+        conn.execute(
+            "SELECT COUNT(*) FROM chunks WHERE embedding_model = ?",
+            (embedding_model,),
+        ).fetchone()[0]
+    )
+
+
+def candidate_threshold() -> int:
+    configured = os.environ.get(
+        "REPO_INDEX_CANDIDATE_THRESHOLD",
+        DEFAULT_CANDIDATE_THRESHOLD,
+    )
+    return int(configured)
+
+
 def fts_scores(
     conn: sqlite3.Connection,
     *,
@@ -1098,8 +1502,8 @@ def fts_scores(
     repo: str | None = None,
     path_prefix: str | None = None,
     language: str | None = None,
-    limit: int = 200,
-) -> dict[str, float]:
+    limit: int = DEFAULT_FTS_CANDIDATE_LIMIT,
+) -> dict[int, float]:
     fts_query = fts_query_for(query_text)
     if not fts_query:
         return {}
@@ -1116,7 +1520,7 @@ def fts_scores(
         params.append(language)
     params.append(limit)
     sql = f"""
-        SELECT f.chunk_id, bm25(chunks_fts) AS rank
+        SELECT c.rowid, bm25(chunks_fts) AS rank
         FROM chunks_fts f
         JOIN chunks c ON c.chunk_id = f.chunk_id
         WHERE {' AND '.join(where)}
@@ -1136,8 +1540,8 @@ def fts_scores(
     worst = max(ranks)
     if best == worst:
         confidence = 1.0 if len(rows) == 1 else 0.25
-        return {row[0]: confidence for row in rows}
-    return {row[0]: (worst - float(row[1])) / (worst - best) for row in rows}
+        return {int(row[0]): confidence for row in rows}
+    return {int(row[0]): (worst - float(row[1])) / (worst - best) for row in rows}
 
 
 def expand_query_text(query_text: str) -> str:
