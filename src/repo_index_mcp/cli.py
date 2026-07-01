@@ -71,8 +71,8 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps([asdict(result) for result in results], indent=2))
         if not results:
             print(
-                "No results. Run `repo-index status`; if no repos are indexed, run "
-                "`repo-index index /path/to/repo` or `repo-index index-root ~/code`.",
+                "No results. Run `codescry status`; if no repos are indexed, run "
+                "`codescry index /path/to/repo` or `codescry index-root ~/code`.",
                 file=sys.stderr,
             )
         return 0
@@ -85,7 +85,7 @@ def main(argv: list[str] | None = None) -> int:
         if result is None:
             print("null")
             print(
-                "No symbol found. Try `repo-index query <name>` or reindex the repo.",
+                "No symbol found. Try `codescry query <name>` or reindex the repo.",
                 file=sys.stderr,
             )
             log_search_event(
@@ -199,7 +199,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="repo-index")
+    parser = argparse.ArgumentParser(prog="codescry")
     parser.add_argument(
         "--db",
         default=str(DEFAULT_DB_PATH),
@@ -241,7 +241,7 @@ def build_parser() -> argparse.ArgumentParser:
     hooks.add_argument("path", type=Path)
     hooks.add_argument("--recursive", action="store_true")
     hooks.add_argument("--force", action="store_true")
-    hooks.add_argument("--command-name", default="repo-index")
+    hooks.add_argument("--command-name", default="codescry")
 
     pilot = subparsers.add_parser("pilot", help="record/report local pilot proof")
     add_pilot_args(pilot)
@@ -303,7 +303,7 @@ def add_pilot_args(parser: argparse.ArgumentParser) -> None:
     activate.add_argument("--client", required=True)
     activate.add_argument("--repo")
     activate.add_argument("--doctor-ok", action="store_true")
-    activate.add_argument("--repo-indexed", action="store_true")
+    activate.add_argument("--repo-ready", dest="repo_indexed", action="store_true")
     activate.add_argument("--tools-visible", action="store_true")
     activate.add_argument("--list-repos-ok", action="store_true")
     activate.add_argument("--search-code-ok", action="store_true")

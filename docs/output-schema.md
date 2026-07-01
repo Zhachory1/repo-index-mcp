@@ -24,7 +24,7 @@ MCP `get_symbol` keeps the original MCP contract and uses `definition` instead o
 - `symbol_name`, `symbol_kind`, `symbol_confidence`.
 - `is_stale`, `has_dirty_tracked_files`.
 
-CLI `repo-index get-symbol` returns the normal search-result shape with `snippet`.
+CLI `codescry get-symbol` returns the normal search-result shape with `snippet`.
 
 ## Index result
 

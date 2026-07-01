@@ -1,17 +1,17 @@
 # Software Engineering Design Document (SEDD)
 
-*This document is the formal proposal and technical blueprint for `repo-index-mcp`, a local codebase retrieval tool distributed to engineers. It aligns engineering and reviewing stakeholders on scope, design, and trade-offs, and is the artifact taken into Design Review.*
+*This document is the formal proposal and technical blueprint for `codescry`, a local codebase retrieval tool distributed to engineers. It aligns engineering and reviewing stakeholders on scope, design, and trade-offs, and is the artifact taken into Design Review.*
 
-**Doc ID:** `20260626-repo-index-mcp`
+**Doc ID:** `20260626-codescry`
 **Status:** In progress (Draft for Design Review)
 **Category:** Developer Productivity / Internal Tooling
 **Last updated:** Jun 26, 2026
 **Owner:** *[Your name]*
 **Reviewers:** *[TBD]*
-**Related artifacts:** `PRD-codebase-index-mcp.md` (the originating PRD)
+**Related artifacts:** `PRD-codescry.md` (the originating PRD)
 **Target Launch:** *[TBD — see Phased Rollout]*
 
-> **Note on classification.** This is a software-engineering design, not an ML model design. We *consume* a pre-trained embedding model as a black box — there is no model we train, retrain, version, or monitor for drift. The hard problems are all software engineering: ingestion, chunking, a swappable storage abstraction, incremental indexing, ranking, and the MCP contract. `repo-index-mcp` is a single, focused, independently useful **tool/component**, not a platform or a service.
+> **Note on classification.** This is a software-engineering design, not an ML model design. We *consume* a pre-trained embedding model as a black box — there is no model we train, retrain, version, or monitor for drift. The hard problems are all software engineering: ingestion, chunking, a swappable storage abstraction, incremental indexing, ranking, and the MCP contract. `codescry` is a single, focused, independently useful **tool/component**, not a platform or a service.
 >
 > **Note on scope and SLAs.** This tool runs on an engineer's laptop. It is **not** a latency-critical production service. Production-grade SLAs and a centralized production observability stack therefore **do not apply** — applying them would be over-engineering. We hold the design to the PRD's own local targets instead (p95 ≤ 500ms warm query, ≤ 60s freshness). The "what changes if this graduates to a shared service" path is captured in §8 and §9.
 
@@ -60,7 +60,7 @@ This design is grounded in current, real-world implementations rather than first
 
 ## 3.1 Proposed Solution (Conceptual Overview)
 
-`repo-index-mcp` is a local Python application with two faces over one core engine:
+`codescry` is a local Python application with two faces over one core engine:
 
 1. An **MCP server** (the primary interface) that a local coding agent calls to self-serve ranked code snippets.
 2. A thin **CLI** (the secondary interface) for humans to index, query, and check status.
@@ -69,7 +69,7 @@ The core engine is a pipeline:
 
 ```mermaid
 flowchart TB
-    subgraph PROC["repo-index-mcp (single local process)"]
+    subgraph PROC["codescry (single local process)"]
         direction TB
 
         subgraph INDEX["Indexing path"]
@@ -344,7 +344,7 @@ Local-appropriate golden-signal analogues, surfaced via `status` and structured 
 
 # 9. Appendix: The Graduation Path (if it proves out)
 
-`repo-index-mcp` is deliberately incubated as a local tool to maximize iteration speed and localize the blast radius of any failure. **If** local value is proven (adoption + sustained eval quality), a *separate* design doc would cover graduation to a shared, multi-user service — at which point auth/RBAC, a managed Postgres datastore, a centralized observability stack, a standard CI/CD deploy pipeline, and an HTTP/SSE MCP transport all become required. We do **not** build any of that now; pulling shared-service complexity into v1 is the premature-abstraction trap and adds coordination overhead with no v1 payoff.
+`codescry` is deliberately incubated as a local tool to maximize iteration speed and localize the blast radius of any failure. **If** local value is proven (adoption + sustained eval quality), a *separate* design doc would cover graduation to a shared, multi-user service — at which point auth/RBAC, a managed Postgres datastore, a centralized observability stack, a standard CI/CD deploy pipeline, and an HTTP/SSE MCP transport all become required. We do **not** build any of that now; pulling shared-service complexity into v1 is the premature-abstraction trap and adds coordination overhead with no v1 payoff.
 
 ---
 

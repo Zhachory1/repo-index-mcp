@@ -1,15 +1,15 @@
 # Release flow
 
-`repo-index-mcp` is a Python package first. The npm package is a small wrapper that lets npm/npx users run the same CLI through `uvx`.
+`codescry` is a Python package first. The npm package is a small wrapper that lets npm/npx users run the same CLI through `uvx`.
 
 ## Local state boundary
 
 Release artifacts ship code only. Do not publish local index data.
 
-- Default DB: `~/.repo-index-mcp/index.sqlite`
-- Override: `repo-index --db /path/to/index.sqlite ...`
+- Default DB: `~/.codescry/index.sqlite`
+- Override: `codescry --db /path/to/index.sqlite ...`
 - Contents: derived code index data that can be deleted and rebuilt
-- Rebuild: `repo-index index-root ~/code`
+- Rebuild: `codescry index-root ~/code`
 
 ## PyPI release
 
@@ -32,8 +32,8 @@ Release artifacts ship code only. Do not publish local index data.
 4. Verify:
 
    ```bash
-   uvx repo-index-mcp doctor
-   uvx repo-index-mcp --db /tmp/repo-index-smoke.sqlite status
+   uvx codescry doctor
+   uvx codescry --db /tmp/codescry-smoke.sqlite status
    ```
 
 ## npm wrapper release
@@ -60,8 +60,8 @@ Release artifacts ship code only. Do not publish local index data.
 5. Verify:
 
    ```bash
-   npx repo-index-mcp@latest doctor
-   npx repo-index-mcp@latest --db /tmp/repo-index-smoke.sqlite status
+   npx codescry@latest doctor
+   npx codescry@latest --db /tmp/codescry-smoke.sqlite status
    ```
 
 ## MCP smoke test
@@ -71,10 +71,10 @@ Use npm/npx config when validating npm wrapper install:
 ```json
 {
   "mcpServers": {
-    "repo-index": {
+    "codescry": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "repo-index-mcp", "--db", "/Users/YOU/.repo-index-mcp/index.sqlite", "serve"],
+      "args": ["-y", "codescry", "--db", "/Users/YOU/.codescry/index.sqlite", "serve"],
       "env": {}
     }
   }

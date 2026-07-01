@@ -17,14 +17,14 @@
 {"id":"rim-017","query":"SearchResult dataclass snippet score language symbol_name","expected_path":"src/repo_index_mcp/models.py","expected_text":"class SearchResult"}
 {"id":"rim-018","query":"pytest engine indexes repo and query returns retry code","expected_path":"tests/test_engine.py","expected_text":"test_index_repo_and_query_returns_code"}
 {"id":"rim-019","query":"test status marks repo stale after new commit","expected_path":"tests/test_engine.py","expected_text":"test_status_marks_repo_stale"}
-{"id":"rim-020","query":"README pipx install agent config mcpServers repo-index","expected_path":"README.md","expected_text":"pipx install"}
-{"id":"rim-021","query":"PRD local first offline capable hard constraint no network query path","expected_path":"docs/PRD-codebase-index-mcp.md","expected_text":"Local-first / offline-capable"}
-{"id":"rim-022","query":"PRD success metrics Recall@10 golden query expected file symbol","expected_path":"docs/PRD-codebase-index-mcp.md","expected_text":"Recall@10"}
-{"id":"rim-023","query":"SEDD vector store decision SQLite pgvector dedicated vector DB","expected_path":"docs/SEDD-20260626-repo-index-mcp.md","expected_text":"Decision 2"}
-{"id":"rim-024","query":"SEDD MCP tools search_code get_symbol list_repos reindex contract","expected_path":"docs/SEDD-20260626-repo-index-mcp.md","expected_text":"MCP tools"}
-{"id":"rim-025","query":"SEDD phase 2 fresh multi repo freshness target cold index throughput","expected_path":"docs/SEDD-20260626-repo-index-mcp.md","expected_text":"Phase 2"}
-{"id":"rim-026","query":"SEDD embedding provider local hosted hard constraint C2 source code","expected_path":"docs/SEDD-20260626-repo-index-mcp.md","expected_text":"Decision 1"}
-{"id":"rim-027","query":"pyproject console scripts repo-index repo-index-mcp","expected_path":"pyproject.toml","expected_text":"repo-index"}
+{"id":"rim-020","query":"README pipx install agent config mcpServers codescry","expected_path":"README.md","expected_text":"pipx install"}
+{"id":"rim-021","query":"PRD local first offline capable hard constraint no network query path","expected_path":"docs/PRD-codescry.md","expected_text":"Local-first / offline-capable"}
+{"id":"rim-022","query":"PRD success metrics Recall@10 golden query expected file symbol","expected_path":"docs/PRD-codescry.md","expected_text":"Recall@10"}
+{"id":"rim-023","query":"SEDD vector store decision SQLite pgvector dedicated vector DB","expected_path":"docs/SEDD-20260626-codescry.md","expected_text":"Decision 2"}
+{"id":"rim-024","query":"SEDD MCP tools search_code get_symbol list_repos reindex contract","expected_path":"docs/SEDD-20260626-codescry.md","expected_text":"MCP tools"}
+{"id":"rim-025","query":"SEDD phase 2 fresh multi repo freshness target cold index throughput","expected_path":"docs/SEDD-20260626-codescry.md","expected_text":"Phase 2"}
+{"id":"rim-026","query":"SEDD embedding provider local hosted hard constraint C2 source code","expected_path":"docs/SEDD-20260626-codescry.md","expected_text":"Decision 1"}
+{"id":"rim-027","query":"pyproject console scripts codescry codescry","expected_path":"pyproject.toml","expected_text":"codescry"}
 {"id":"rim-028","query":"gitignore pytest cache ruff cache repo index sqlite","expected_path":".gitignore","expected_text":".pytest_cache"}
 {"id":"rim-029","query":"chunk id hash repo path start line content","expected_path":"src/repo_index_mcp/storage.py","expected_text":"def chunk_id_for"}
 {"id":"rim-030","query":"repo_id uses resolved local repo path and remote_url is separate sanitized metadata","expected_path":"src/repo_index_mcp/repo.py","expected_text":"def repo_id_for"}

@@ -1,6 +1,6 @@
 # Pilot plan
 
-Goal: prove `repo-index-mcp` saves engineers time in real agent-assisted work.
+Goal: prove `codescry` saves engineers time in real agent-assisted work.
 
 ## Pilot cohort
 
@@ -27,7 +27,7 @@ Recruit 5 engineers who regularly work across unfamiliar or multi-repo code.
 Pilot events are written locally to:
 
 ```bash
-~/.repo-index-mcp/usage.jsonl
+~/.codescry/usage.jsonl
 ```
 
 The log records task events, activations, retention, and misses. Passive query logging is off by default. When enabled, it records local salted query IDs/lengths, result counts, top paths, and latency. It does not store snippets or raw query text by default.
@@ -35,22 +35,22 @@ The log records task events, activations, retention, and misses. Passive query l
 Enable passive query logging for a pilot session:
 
 ```bash
-REPO_INDEX_ENABLE_USAGE_LOG=1 repo-index serve
+CODESCRY_ENABLE_USAGE_LOG=1 codescry serve
 ```
 
-Set `REPO_INDEX_LOG_RAW_TEXT=1` only if you explicitly want raw query/miss text in the local log.
+Set `CODESCRY_LOG_RAW_TEXT=1` only if you explicitly want raw query/miss text in the local log.
 
 Disable logging for a command if needed:
 
 ```bash
-REPO_INDEX_DISABLE_USAGE_LOG=1 repo-index query "..."
+CODESCRY_DISABLE_USAGE_LOG=1 codescry query "..."
 ```
 
 ## Activation checklist
 
 A pilot engineer is activated only when all are true:
 
-1. `repo-index doctor` passes.
+1. `codescry doctor` passes.
 2. At least one work repo is indexed.
 3. MCP client shows `search_code`, `get_symbol`, `list_repos`, `reindex`.
 4. Engineer successfully calls `list_repos` through MCP.
@@ -59,12 +59,12 @@ A pilot engineer is activated only when all are true:
 Record activation:
 
 ```bash
-repo-index pilot activate \
+codescry pilot activate \
   --engineer "Ada" \
   --client mewrite \
   --repo ~/code/example \
   --doctor-ok \
-  --repo-indexed \
+  --repo-ready \
   --tools-visible \
   --list-repos-ok \
   --search-code-ok \
@@ -77,7 +77,7 @@ repo-index pilot activate \
 Start a measured task:
 
 ```bash
-TASK_ID=$(repo-index pilot start-task \
+TASK_ID=$(codescry pilot start-task \
   --engineer "Ada" \
   --task "find retry implementation" \
   --task-class "code search" \
@@ -87,7 +87,7 @@ TASK_ID=$(repo-index pilot start-task \
 End a measured task:
 
 ```bash
-repo-index pilot end-task "$TASK_ID" \
+codescry pilot end-task "$TASK_ID" \
   --engineer "Ada" \
   --baseline-source observed_paired_task \
   --baseline-minutes 10 \
@@ -102,13 +102,13 @@ repo-index pilot end-task "$TASK_ID" \
 Record week-2 retention:
 
 ```bash
-repo-index pilot retain --engineer "Ada" --enabled yes --week2 --notes "still enabled"
+codescry pilot retain --engineer "Ada" --enabled yes --week2 --notes "still enabled"
 ```
 
 Record a miss. Raw query text is hashed/length-only in the local log unless raw logging is explicitly enabled; use scrubbed fields for reviewable wording.
 
 ```bash
-repo-index pilot miss \
+codescry pilot miss \
   --scrubbed-query "where is retry backoff configured" \
   --expected-path src/retry.py \
   --scrubbed-expected-text "def retry"
@@ -117,13 +117,13 @@ repo-index pilot miss \
 Generate a single-user report:
 
 ```bash
-repo-index pilot report
+codescry pilot report
 ```
 
 Generate a cohort report from multiple exported local logs:
 
 ```bash
-repo-index pilot report \
+codescry pilot report \
   --usage-log ada.usage.jsonl \
   --usage-log grace.usage.jsonl \
   --usage-log linus.usage.jsonl
@@ -134,7 +134,7 @@ The report is numeric evidence only. Final expand/stop decisions still require m
 Add a miss to the golden eval set:
 
 ```bash
-repo-index eval-add evals/golden.repo-index-mcp.jsonl \
+codescry eval-add evals/golden.codescry.jsonl \
   --id pilot-001 \
   --query "where is retry backoff configured" \
   --expected-path src/retry.py \
@@ -159,7 +159,7 @@ Decision-grade rows require observed baseline/tool timings.
 
 Baseline source values:
 
-- `observed_paired_task`: same task class measured without `repo-index` before the pilot.
+- `observed_paired_task`: same task class measured without `codescry` before the pilot.
 - `prior_comparable`: paired comparable task in same repo area.
 - `estimate`: qualitative only. Estimate-only rows cannot be marked `--decision-grade` and do not count toward the 50% reduction metric.
 
@@ -173,7 +173,7 @@ Baseline source values:
 
 ## Pilot decision gate
 
-`repo-index pilot report` computes the metric gate. It is numeric evidence, not a complete go/no-go decision. Expand beyond pilot only if metric gate passes and manual issue review passes:
+`codescry pilot report` computes the metric gate. It is numeric evidence, not a complete go/no-go decision. Expand beyond pilot only if metric gate passes and manual issue review passes:
 
 - At least 4 of 5 engineers activate.
 - At least 70% keep MCP enabled after week 2.

@@ -146,8 +146,8 @@ Run:
 ```bash
 python3 -m pytest -q
 python3 -m ruff check .
-PYTHONPATH=src python3 -m repo_index_mcp --db .repo-index-mcp/phase3.sqlite index-root .
-PYTHONPATH=src python3 -m repo_index_mcp --db .repo-index-mcp/phase3.sqlite eval evals/golden.repo-index-mcp.jsonl . -k 10
+PYTHONPATH=src python3 -m repo_index_mcp --db .codescry/phase3.sqlite index-root .
+PYTHONPATH=src python3 -m repo_index_mcp --db .codescry/phase3.sqlite eval evals/golden.codescry.jsonl . -k 10
 ```
 
 Record:

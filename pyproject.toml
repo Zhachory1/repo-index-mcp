@@ -3,9 +3,9 @@ requires = ["hatchling>=1.25"]
 build-backend = "hatchling.build"
 
 [project]
-name = "repo-index-mcp"
-version = "0.2.3"
-description = "Local codebase index with MCP retrieval tools"
+name = "codescry"
+version = "0.2.4"
+description = "CodeScry local codebase index with MCP retrieval tools"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -16,9 +16,13 @@ dependencies = [
 authors = [{ name = "Zhachory Volker" }]
 license = { text = "MIT" }
 
+[project.urls]
+Homepage = "https://github.com/Zhachory1/codescry"
+Repository = "https://github.com/Zhachory1/codescry"
+Issues = "https://github.com/Zhachory1/codescry/issues"
+
 [project.scripts]
-repo-index = "repo_index_mcp.cli:main"
-repo-index-mcp = "repo_index_mcp.cli:main"
+codescry = "repo_index_mcp.cli:main"
 
 [project.optional-dependencies]
 dev = [
@@ -26,6 +30,12 @@ dev = [
   "pytest>=8.0",
   "ruff>=0.5",
 ]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/repo_index_mcp"]
+
+[tool.hatch.build.targets.sdist]
+exclude = ["/assets"]
 
 [tool.ruff]
 line-length = 100

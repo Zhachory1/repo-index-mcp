@@ -47,7 +47,7 @@ def test_get_symbol_cli_returns_symbol(
     capsys,  # type: ignore[no-untyped-def]
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("REPO_INDEX_USAGE_LOG", str(tmp_path / "usage.jsonl"))
+    monkeypatch.setenv("CODESCRY_USAGE_LOG", str(tmp_path / "usage.jsonl"))
     repo = tmp_path / "repo"
     db_path = tmp_path / "index.sqlite"
     repo.mkdir()
@@ -68,7 +68,7 @@ def test_query_empty_result_prints_hint(
     capsys,  # type: ignore[no-untyped-def]
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("REPO_INDEX_USAGE_LOG", str(tmp_path / "usage.jsonl"))
+    monkeypatch.setenv("CODESCRY_USAGE_LOG", str(tmp_path / "usage.jsonl"))
     db_path = tmp_path / "index.sqlite"
 
     assert main(["--db", str(db_path), "query", "nothing"]) == 0
@@ -83,7 +83,7 @@ def test_pilot_report_summarizes_decision_grade_task(
     capsys,  # type: ignore[no-untyped-def]
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("REPO_INDEX_USAGE_LOG", str(tmp_path / "usage.jsonl"))
+    monkeypatch.setenv("CODESCRY_USAGE_LOG", str(tmp_path / "usage.jsonl"))
 
     assert main([
         "pilot",
@@ -93,7 +93,7 @@ def test_pilot_report_summarizes_decision_grade_task(
         "--client",
         "mewrite",
         "--doctor-ok",
-        "--repo-indexed",
+        "--repo-ready",
         "--tools-visible",
         "--list-repos-ok",
         "--search-code-ok",
@@ -148,7 +148,7 @@ def test_pilot_report_retention_denominator_is_activated_engineers(
     capsys,  # type: ignore[no-untyped-def]
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("REPO_INDEX_USAGE_LOG", str(tmp_path / "usage.jsonl"))
+    monkeypatch.setenv("CODESCRY_USAGE_LOG", str(tmp_path / "usage.jsonl"))
     for engineer in ("Ada", "Grace", "Linus", "Margaret"):
         assert main([
             "pilot",
@@ -158,7 +158,7 @@ def test_pilot_report_retention_denominator_is_activated_engineers(
             "--client",
             "mewrite",
             "--doctor-ok",
-            "--repo-indexed",
+            "--repo-ready",
             "--tools-visible",
             "--list-repos-ok",
             "--search-code-ok",
@@ -174,7 +174,7 @@ def test_pilot_report_retention_denominator_is_activated_engineers(
 
 def test_search_usage_logging_is_opt_in(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     usage_log = tmp_path / "usage.jsonl"
-    monkeypatch.setenv("REPO_INDEX_USAGE_LOG", str(usage_log))
+    monkeypatch.setenv("CODESCRY_USAGE_LOG", str(usage_log))
 
     assert main(["--db", str(tmp_path / "index.sqlite"), "query", "secret query text"]) == 0
 
@@ -182,7 +182,7 @@ def test_search_usage_logging_is_opt_in(tmp_path: Path, monkeypatch: pytest.Monk
 
 
 def test_decision_grade_rejects_estimates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("REPO_INDEX_USAGE_LOG", str(tmp_path / "usage.jsonl"))
+    monkeypatch.setenv("CODESCRY_USAGE_LOG", str(tmp_path / "usage.jsonl"))
 
     with pytest.raises(SystemExit):
         main([
@@ -206,8 +206,8 @@ def test_usage_log_redacts_raw_query_text(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     usage_log = tmp_path / "usage.jsonl"
-    monkeypatch.setenv("REPO_INDEX_USAGE_LOG", str(usage_log))
-    monkeypatch.setenv("REPO_INDEX_ENABLE_USAGE_LOG", "1")
+    monkeypatch.setenv("CODESCRY_USAGE_LOG", str(usage_log))
+    monkeypatch.setenv("CODESCRY_ENABLE_USAGE_LOG", "1")
 
     assert main(["--db", str(tmp_path / "index.sqlite"), "query", "secret query text"]) == 0
 
@@ -252,7 +252,7 @@ def test_pilot_report_skips_malformed_jsonl(
         '"baseline_minutes":"oops","tool_minutes":1}\n',
         encoding="utf-8",
     )
-    monkeypatch.setenv("REPO_INDEX_USAGE_LOG", str(usage_log))
+    monkeypatch.setenv("CODESCRY_USAGE_LOG", str(usage_log))
 
     assert main(["pilot", "report"]) == 0
 

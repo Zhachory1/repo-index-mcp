@@ -1,36 +1,36 @@
 # Upgrade and uninstall
 
-## Upgrade from GitHub
+## Upgrade PyPI package
 
 ```bash
-pipx install --force git+https://github.com/Zhachory1/repo-index-mcp.git@v0.2.3
+pipx install --force codescry
 ```
 
 ## Upgrade npm wrapper
 
 ```bash
-npm install -g repo-index-mcp@latest
+npm install -g codescry@latest
 ```
 
-For one-shot usage, `npx repo-index-mcp@latest doctor` fetches the latest npm wrapper and runs the Python package through `uvx`.
+For one-shot usage, `npx codescry@latest doctor` fetches the latest npm wrapper and runs the Python package through `uvx`.
 
 ## Uninstall
 
 ```bash
-pipx uninstall repo-index-mcp
-npm uninstall -g repo-index-mcp
+pipx uninstall codescry
+npm uninstall -g codescry
 ```
 
 ## Remove local index
 
 ```bash
-rm ~/.repo-index-mcp/index.sqlite
+rm ~/.codescry/index.sqlite
 ```
 
 The index is derived data. Rebuild with:
 
 ```bash
-repo-index index-root ~/code
+codescry index-root ~/code
 ```
 
 ## 0.x compatibility

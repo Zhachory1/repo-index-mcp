@@ -24,7 +24,7 @@ from repo_index_mcp.repo import (
 from repo_index_mcp.secrets import SECRET_FILTER_VERSION, looks_like_secret
 from repo_index_mcp.storage import SQLiteStorage
 
-DEFAULT_DB_PATH = Path.home() / ".repo-index-mcp" / "index.sqlite"
+DEFAULT_DB_PATH = Path.home() / ".codescry" / "index.sqlite"
 
 
 class RepoIndex:

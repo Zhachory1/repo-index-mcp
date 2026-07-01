@@ -14,7 +14,7 @@ from typing import Any
 
 from repo_index_mcp.models import SearchResult
 
-USAGE_DIR = Path.home() / ".repo-index-mcp"
+USAGE_DIR = Path.home() / ".codescry"
 DEFAULT_USAGE_LOG = USAGE_DIR / "usage.jsonl"
 TEXT_ID_SALT = USAGE_DIR / "usage_salt"
 
@@ -22,7 +22,7 @@ TEXT_ID_SALT = USAGE_DIR / "usage_salt"
 def usage_log_path(path: str | Path | None = None) -> Path:
     if path is not None:
         return Path(path).expanduser()
-    configured = os.environ.get("REPO_INDEX_USAGE_LOG")
+    configured = os.environ.get("CODESCRY_USAGE_LOG")
     return Path(configured).expanduser() if configured else DEFAULT_USAGE_LOG
 
 
@@ -32,7 +32,7 @@ def write_event(
     path: str | Path | None = None,
     strict: bool = False,
 ) -> bool:
-    if os.environ.get("REPO_INDEX_DISABLE_USAGE_LOG") == "1":
+    if os.environ.get("CODESCRY_DISABLE_USAGE_LOG") == "1":
         return True
     target = usage_log_path(path)
     payload = {"ts": time.time(), **event}
@@ -108,7 +108,7 @@ def log_search_event(
     language: str | None = None,
     k: int | None = None,
 ) -> None:
-    if os.environ.get("REPO_INDEX_ENABLE_USAGE_LOG") != "1":
+    if os.environ.get("CODESCRY_ENABLE_USAGE_LOG") != "1":
         return
     try:
         event = {
@@ -421,7 +421,7 @@ def text_payload(field: str, value: str | None) -> dict[str, Any]:
         f"{field}_length": len(value),
         f"{field}_id": stable_text_id(value),
     }
-    if os.environ.get("REPO_INDEX_LOG_RAW_TEXT") == "1":
+    if os.environ.get("CODESCRY_LOG_RAW_TEXT") == "1":
         payload[field] = value
     return payload
 

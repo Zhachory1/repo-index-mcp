@@ -20,10 +20,10 @@ def test_npm_wrapper_forwards_args_to_uvx(tmp_path: Path) -> None:
         uvx.write_text(
             "@echo off\r\n"
             "setlocal enabledelayedexpansion\r\n"
-            "break > %REPO_INDEX_MCP_TEST_ARGS%\r\n"
+            "break > %CODESCRY_TEST_ARGS%\r\n"
             ":loop\r\n"
             "if \"%~1\"==\"\" exit /b 17\r\n"
-            "echo %~1>> %REPO_INDEX_MCP_TEST_ARGS%\r\n"
+            "echo %~1>> %CODESCRY_TEST_ARGS%\r\n"
             "shift\r\n"
             "goto loop\r\n",
             encoding="utf-8",
@@ -31,7 +31,7 @@ def test_npm_wrapper_forwards_args_to_uvx(tmp_path: Path) -> None:
     else:
         uvx.write_text(
             "#!/bin/sh\n"
-            "printf '%s\\n' \"$@\" > \"$REPO_INDEX_MCP_TEST_ARGS\"\n"
+            "printf '%s\\n' \"$@\" > \"$CODESCRY_TEST_ARGS\"\n"
             "exit 17\n",
             encoding="utf-8",
         )
@@ -39,11 +39,11 @@ def test_npm_wrapper_forwards_args_to_uvx(tmp_path: Path) -> None:
 
     env = os.environ.copy()
     env["PATH"] = f"{tmp_path}{os.pathsep}{env.get('PATH', '')}"
-    env["REPO_INDEX_MCP_TEST_ARGS"] = str(output)
-    env.pop("REPO_INDEX_MCP_UVX", None)
+    env["CODESCRY_TEST_ARGS"] = str(output)
+    env.pop("CODESCRY_UVX", None)
 
     result = subprocess.run(
-        [NODE, "bin/repo-index.js", "--db", "/tmp/index.sqlite", "doctor"],
+        [NODE, "bin/codescry.js", "--db", "/tmp/index.sqlite", "doctor"],
         cwd=REPO_ROOT,
         env=env,
         check=False,
@@ -51,7 +51,7 @@ def test_npm_wrapper_forwards_args_to_uvx(tmp_path: Path) -> None:
 
     assert result.returncode == 17
     assert output.read_text(encoding="utf-8").splitlines() == [
-        "repo-index-mcp",
+        "codescry",
         "--db",
         "/tmp/index.sqlite",
         "doctor",
@@ -63,10 +63,10 @@ def test_npm_wrapper_explains_missing_uvx(tmp_path: Path) -> None:
     empty_path.mkdir()
     env = os.environ.copy()
     env["PATH"] = str(empty_path)
-    env.pop("REPO_INDEX_MCP_UVX", None)
+    env.pop("CODESCRY_UVX", None)
 
     result = subprocess.run(
-        [NODE, "bin/repo-index.js", "doctor"],
+        [NODE, "bin/codescry.js", "doctor"],
         cwd=REPO_ROOT,
         env=env,
         text=True,
@@ -76,4 +76,4 @@ def test_npm_wrapper_explains_missing_uvx(tmp_path: Path) -> None:
 
     assert result.returncode == 127
     assert "requires uv" in result.stderr
-    assert "npx repo-index-mcp doctor" in result.stderr
+    assert "npx codescry doctor" in result.stderr

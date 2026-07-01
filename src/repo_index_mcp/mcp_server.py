@@ -13,10 +13,10 @@ def run_server(*, db_path: str | Path = DEFAULT_DB_PATH) -> None:
     try:
         from mcp.server.fastmcp import FastMCP
     except ImportError as exc:
-        raise RuntimeError("Install repo-index-mcp with the mcp dependency to run serve") from exc
+        raise RuntimeError("Install codescry with the mcp dependency to run serve") from exc
 
     engine = RepoIndex(db_path=db_path)
-    mcp = FastMCP("repo-index-mcp")
+    mcp = FastMCP("codescry")
 
     @mcp.tool()
     def search_code(

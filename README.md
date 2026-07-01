@@ -1,19 +1,22 @@
-# repo-index-mcp
+<div align="center">
+  <img src="https://raw.githubusercontent.com/Zhachory1/codescry/main/assets/codescry_logo.png" alt="CodeScry logo" width="180">
+  <h1>CodeScry</h1>
+</div>
 
-Local codebase retrieval tool for coding agents. It indexes committed code from local git repos into a local SQLite database, then exposes ranked snippets through a CLI and MCP stdio server.
+CodeScry is a local codebase retrieval tool for coding agents. It indexes committed code from local git repos into a local SQLite database, then exposes ranked snippets through a CLI and MCP stdio server.
 
 ## Install
 
-From GitHub with `pipx`:
+From PyPI with `pipx`:
 
 ```bash
-pipx install git+https://github.com/Zhachory1/repo-index-mcp.git@v0.2.3
+pipx install codescry
 ```
 
 With npm/npx, after installing [`uv`](https://docs.astral.sh/uv/getting-started/installation/):
 
 ```bash
-npx repo-index-mcp doctor
+npx codescry doctor
 ```
 
 The npm package is a thin wrapper around the Python package. It does not bundle local SQLite index data.
@@ -29,7 +32,7 @@ pip install -e '.[dev]'
 Check local readiness:
 
 ```bash
-repo-index doctor
+codescry doctor
 ```
 
 ## First success path
@@ -39,31 +42,31 @@ For a deterministic five-minute smoke test, see `docs/getting-started.md`.
 Index this repo or another local git repo:
 
 ```bash
-repo-index index /path/to/git/repo
+codescry index /path/to/git/repo
 ```
 
 Query it:
 
 ```bash
-repo-index query "where is request retry handled" -k 5
+codescry query "where is request retry handled" -k 5
 ```
 
 Lookup a symbol:
 
 ```bash
-repo-index get-symbol RepoIndex --repo /path/to/git/repo
+codescry get-symbol RepoIndex --repo /path/to/git/repo
 ```
 
 Discover and index every git repo under a root:
 
 ```bash
-repo-index index-root ~/code
+codescry index-root ~/code
 ```
 
 Show indexed repos and freshness:
 
 ```bash
-repo-index status
+codescry status
 ```
 
 ## MCP setup
@@ -71,7 +74,7 @@ repo-index status
 Run the MCP server over stdio:
 
 ```bash
-repo-index serve
+codescry serve
 ```
 
 Agent config example:
@@ -79,10 +82,10 @@ Agent config example:
 ```json
 {
   "mcpServers": {
-    "repo-index": {
+    "codescry": {
       "type": "stdio",
-      "command": "/Users/YOU/.local/bin/repo-index",
-      "args": ["--db", "/Users/YOU/.repo-index-mcp/index.sqlite", "serve"],
+      "command": "/Users/YOU/.local/bin/codescry",
+      "args": ["--db", "/Users/YOU/.codescry/index.sqlite", "serve"],
       "env": {}
     }
   }
@@ -94,31 +97,31 @@ npm/npx config example:
 ```json
 {
   "mcpServers": {
-    "repo-index": {
+    "codescry": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "repo-index-mcp", "--db", "/Users/YOU/.repo-index-mcp/index.sqlite", "serve"],
+      "args": ["-y", "codescry", "--db", "/Users/YOU/.codescry/index.sqlite", "serve"],
       "env": {}
     }
   }
 }
 ```
 
-Use `which repo-index` to find the absolute command path for your machine when using direct CLI installs.
+Use `which codescry` to find the absolute command path for your machine when using direct CLI installs.
 
 ## Freshness hooks
 
 Install hooks for one repo or a repo root:
 
 ```bash
-repo-index install-hooks /path/to/git/repo
-repo-index install-hooks ~/code --recursive
+codescry install-hooks /path/to/git/repo
+codescry install-hooks ~/code --recursive
 ```
 
 Hooks run best-effort after commit/merge:
 
 ```bash
-repo-index --db <db> reindex "$PWD"
+codescry --db <db> reindex "$PWD"
 ```
 
 They preserve the selected DB path and must not fail git commands.
@@ -139,20 +142,20 @@ They preserve the selected DB path and must not fail git commands.
 
 ## Evals
 
-Phase 0 eval docs live in `docs/phase-0-baseline.md`. The seed golden set lives in `evals/golden.repo-index-mcp.jsonl`.
+Phase 0 eval docs live in `docs/phase-0-baseline.md`. The seed golden set lives in `evals/golden.codescry.jsonl`.
 
 Run the eval gate:
 
 ```bash
-repo-index eval evals/golden.repo-index-mcp.jsonl . -k 10 --fail-under 0.85
+codescry eval evals/golden.codescry.jsonl . -k 10 --fail-under 0.85
 ```
 
 ## Pilot proof
 
-Pilot task/activation/miss events are recorded in `~/.repo-index-mcp/usage.jsonl` without snippets. Passive query logging is opt-in with `REPO_INDEX_ENABLE_USAGE_LOG=1`. Use:
+Pilot task/activation/miss events are recorded in `~/.codescry/usage.jsonl` without snippets. Passive query logging is opt-in with `CODESCRY_ENABLE_USAGE_LOG=1`. Use:
 
 ```bash
-repo-index pilot report
+codescry pilot report
 ```
 
 See `docs/pilot.md` for activation, timing, miss capture, and decision gates.

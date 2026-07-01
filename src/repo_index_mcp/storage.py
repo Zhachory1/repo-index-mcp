@@ -1134,7 +1134,7 @@ def insert_vector_rows(conn: sqlite3.Connection, rows: Sequence[tuple[object, ..
 
 
 def should_maintain_vectors(conn: sqlite3.Connection) -> bool:
-    if os.environ.get("REPO_INDEX_MAINTAIN_VECTORS") == "1":
+    if os.environ.get("CODESCRY_MAINTAIN_VECTORS") == "1":
         return True
     row = conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table' AND name='chunk_vectors'"
@@ -1411,7 +1411,7 @@ def should_try_candidate_union(
     language: str | None,
     k: int | None,
 ) -> bool:
-    if os.environ.get("REPO_INDEX_DISABLE_CANDIDATE_UNION") == "1":
+    if os.environ.get("CODESCRY_DISABLE_CANDIDATE_UNION") == "1":
         return False
     if k is None or wants_docs_query(query_text):
         return False
@@ -1487,10 +1487,7 @@ def matching_chunk_count(conn: sqlite3.Connection, *, embedding_model: str) -> i
 
 
 def candidate_threshold() -> int:
-    configured = os.environ.get(
-        "REPO_INDEX_CANDIDATE_THRESHOLD",
-        DEFAULT_CANDIDATE_THRESHOLD,
-    )
+    configured = os.environ.get("CODESCRY_CANDIDATE_THRESHOLD", DEFAULT_CANDIDATE_THRESHOLD)
     return int(configured)
 
 

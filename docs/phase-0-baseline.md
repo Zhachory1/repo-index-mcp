@@ -6,7 +6,7 @@ Phase 0 exists to stop fake progress. Build needs measurable retrieval quality a
 
 Current seed set:
 
-- `evals/golden.repo-index-mcp.jsonl`
+- `evals/golden.codescry.jsonl`
 - 32 query → expected code/doc location cases
 - Each case has:
   - `id`
@@ -19,19 +19,19 @@ Current seed set:
 Run:
 
 ```bash
-repo-index eval evals/golden.repo-index-mcp.jsonl . -k 10
+codescry eval evals/golden.codescry.jsonl . -k 10
 ```
 
 JSON output:
 
 ```bash
-repo-index eval evals/golden.repo-index-mcp.jsonl . -k 10 --json
+codescry eval evals/golden.codescry.jsonl . -k 10 --json
 ```
 
 Quality gate once corpus is representative:
 
 ```bash
-repo-index eval evals/golden.repo-index-mcp.jsonl . -k 10 --fail-under 0.85
+codescry eval evals/golden.codescry.jsonl . -k 10 --fail-under 0.85
 ```
 
 ## Seed baseline result

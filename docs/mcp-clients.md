@@ -5,17 +5,17 @@
 ```json
 {
   "mcpServers": {
-    "repo-index": {
+    "codescry": {
       "type": "stdio",
-      "command": "/Users/YOU/.local/bin/repo-index",
-      "args": ["--db", "/Users/YOU/.repo-index-mcp/index.sqlite", "serve"],
+      "command": "/Users/YOU/.local/bin/codescry",
+      "args": ["--db", "/Users/YOU/.codescry/index.sqlite", "serve"],
       "env": {}
     }
   }
 }
 ```
 
-Global `--db` must come before `serve`. Use `which repo-index` to find the absolute command path; GUI clients often do not inherit shell `PATH`.
+Global `--db` must come before `serve`. Use `which codescry` to find the absolute command path; GUI clients often do not inherit shell `PATH`.
 
 ## npm/npx wrapper
 
@@ -24,10 +24,10 @@ If `uv` is installed, the npm package can run the Python package through `uvx`:
 ```json
 {
   "mcpServers": {
-    "repo-index": {
+    "codescry": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "repo-index-mcp", "--db", "/Users/YOU/.repo-index-mcp/index.sqlite", "serve"],
+      "args": ["-y", "codescry", "--db", "/Users/YOU/.codescry/index.sqlite", "serve"],
       "env": {}
     }
   }
@@ -50,10 +50,10 @@ Add the generic server block under `mcpServers`, then restart the client.
 CLI checks:
 
 ```bash
-repo-index doctor
-repo-index status
-repo-index query hello_world -k 1
-npx repo-index-mcp doctor
+codescry doctor
+codescry status
+codescry query hello_world -k 1
+npx codescry doctor
 ```
 
 Client checks:

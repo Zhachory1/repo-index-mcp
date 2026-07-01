@@ -101,7 +101,7 @@ def test_default_candidate_union_preserves_vector_hit_with_fts_distractors(
             chunker_version="chunker",
         )
     storage.backfill_vectors()
-    monkeypatch.setenv("REPO_INDEX_CANDIDATE_THRESHOLD", "1")
+    monkeypatch.setenv("CODESCRY_CANDIDATE_THRESHOLD", "1")
     with storage._connect() as conn:  # noqa: SLF001
         assert should_try_candidate_union(
             conn,
@@ -119,7 +119,7 @@ def test_default_candidate_union_preserves_vector_hit_with_fts_distractors(
         k=5,
         query_text="rate_limit throttling",
     )
-    monkeypatch.setenv("REPO_INDEX_DISABLE_CANDIDATE_UNION", "1")
+    monkeypatch.setenv("CODESCRY_DISABLE_CANDIDATE_UNION", "1")
     with storage._connect() as conn:  # noqa: SLF001
         assert should_try_candidate_union(
             conn,

@@ -108,7 +108,7 @@ Install hooks:
 Hook command must preserve selected DB path:
 
 ```bash
-repo-index --db <db> reindex "$PWD" >/dev/null 2>&1 || true
+codescry --db <db> reindex "$PWD" >/dev/null 2>&1 || true
 ```
 
 Hook installer must reject shell metacharacters in command name and shell-quote the DB path.
@@ -120,12 +120,12 @@ If the DB is locked by another indexing process, hook reindex should exit succes
 Commands:
 
 ```bash
-repo-index index /path/to/repo
-repo-index index-root ~/code
-repo-index status
-repo-index install-hooks /path/to/repo
-repo-index install-hooks ~/code --recursive
-repo-index reindex /path/to/repo
+codescry index /path/to/repo
+codescry index-root ~/code
+codescry status
+codescry install-hooks /path/to/repo
+codescry install-hooks ~/code --recursive
+codescry reindex /path/to/repo
 ```
 
 `index` and `index-root` output must include:
@@ -163,9 +163,9 @@ Before merge:
 ```bash
 python3 -m pytest -q
 python3 -m ruff check .
-PYTHONPATH=src python3 -m repo_index_mcp --db .repo-index-mcp/phase2.sqlite index-root .
-PYTHONPATH=src python3 -m repo_index_mcp --db .repo-index-mcp/phase2.sqlite index-root .
-PYTHONPATH=src python3 -m repo_index_mcp --db .repo-index-mcp/phase2.sqlite status
+PYTHONPATH=src python3 -m repo_index_mcp --db .codescry/phase2.sqlite index-root .
+PYTHONPATH=src python3 -m repo_index_mcp --db .codescry/phase2.sqlite index-root .
+PYTHONPATH=src python3 -m repo_index_mcp --db .codescry/phase2.sqlite status
 ```
 
 Expected smoke result:

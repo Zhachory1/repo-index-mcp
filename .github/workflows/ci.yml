@@ -22,19 +22,19 @@ jobs:
       - name: Test
         run: pytest -q
       - name: Eval gate
-        run: repo-index --db .repo-index-mcp/ci.sqlite eval evals/golden.repo-index-mcp.jsonl . -k 10 --fail-under 0.85
+        run: codescry --db .codescry/ci.sqlite eval evals/golden.codescry.jsonl . -k 10 --fail-under 0.85
       - name: NPM package dry-run
         run: npm pack --dry-run
       - name: Build package
         run: python -m build
       - name: Installed console smoke
         run: |
-          python -m venv /tmp/repo-index-smoke
-          /tmp/repo-index-smoke/bin/pip install dist/*.whl
-          /tmp/repo-index-smoke/bin/repo-index --help
-          /tmp/repo-index-smoke/bin/repo-index --db /tmp/repo-index-smoke/index.sqlite doctor
-          mkdir -p /tmp/repo-index-fixture
-          cd /tmp/repo-index-fixture
+          python -m venv /tmp/codescry-smoke
+          /tmp/codescry-smoke/bin/pip install dist/*.whl
+          /tmp/codescry-smoke/bin/codescry --help
+          /tmp/codescry-smoke/bin/codescry --db /tmp/codescry-smoke/index.sqlite doctor
+          mkdir -p /tmp/codescry-fixture
+          cd /tmp/codescry-fixture
           git init -b main
           git config user.email test@example.com
           git config user.name Test
@@ -42,5 +42,5 @@ jobs:
           printf 'def hello_world():\n    return True\n' > app.py
           git add app.py
           git commit -m init
-          /tmp/repo-index-smoke/bin/repo-index --db /tmp/repo-index-smoke/index.sqlite index .
-          /tmp/repo-index-smoke/bin/repo-index --db /tmp/repo-index-smoke/index.sqlite query hello_world -k 1
+          /tmp/codescry-smoke/bin/codescry --db /tmp/codescry-smoke/index.sqlite index .
+          /tmp/codescry-smoke/bin/codescry --db /tmp/codescry-smoke/index.sqlite query hello_world -k 1

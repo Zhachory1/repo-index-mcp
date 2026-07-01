@@ -1,6 +1,6 @@
 # Security
 
-`repo-index-mcp` is local-first. By default it does not send source code or embeddings to external services. Future non-default integrations should be reviewed separately before use.
+`codescry` is local-first. By default it does not send source code or embeddings to external services. Future non-default integrations should be reviewed separately before use.
 
 ## Data boundary
 
@@ -30,13 +30,13 @@ If a secret may have been indexed:
 2. Delete the local index database, usually:
 
    ```bash
-   rm ~/.repo-index-mcp/index.sqlite
+   rm ~/.codescry/index.sqlite
    ```
 
 3. Re-index safe repos:
 
    ```bash
-   repo-index index-root ~/code
+   codescry index-root ~/code
    ```
 
 For custom DB paths, delete the DB passed via `--db`.

@@ -15,7 +15,7 @@ COMMAND_RE = re.compile(r"^[A-Za-z0-9_./-]+$")
 def install_hooks(
     repo_path: str | Path,
     *,
-    command: str = "repo-index",
+    command: str = "codescry",
     db_path: str | Path | None = None,
     force: bool = False,
 ) -> list[Path]:
@@ -52,7 +52,7 @@ def hook_script(command: str, *, db_path: str | Path | None = None) -> str:
         db_args = f" --db {shlex.quote(str(resolved_db_path))}"
     reindex_command = f"{command}{db_args} reindex \"$PWD\""
     return f"""#!/bin/sh
-# Auto-installed by repo-index-mcp. Keeps local code retrieval index fresh after git changes.
+# Auto-installed by CodeScry. Keeps local code retrieval index fresh after git changes.
 if command -v {command} >/dev/null 2>&1; then
   {reindex_command} >/dev/null 2>&1 || true
 fi

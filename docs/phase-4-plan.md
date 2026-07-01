@@ -36,7 +36,7 @@ Add GitHub Actions workflow:
 - run `pytest -q`.
 - run eval gate with `--fail-under 0.85`.
 - build wheel/sdist and install in a clean venv without `PYTHONPATH`.
-- run `repo-index --help`, `repo-index doctor`, and a tiny index/query smoke through console script.
+- run `codescry --help`, `codescry doctor`, and a tiny index/query smoke through console script.
 
 No publish/release automation in this phase.
 
@@ -66,7 +66,7 @@ No network secret scanner. No upload.
 Add:
 
 ```bash
-repo-index doctor
+codescry doctor
 ```
 
 Output JSON with:
@@ -92,7 +92,7 @@ Each check should also include an explicit `ok` boolean in JSON output.
 Update README:
 
 - first-success path from install to index to query to MCP config.
-- install with `pipx install git+https://github.com/Zhachory1/repo-index-mcp.git`.
+- install with `pipx install codescry`.
 - local editable install.
 - MCP config example.
 - `doctor` command and exit codes.
@@ -130,13 +130,13 @@ Run:
 ```bash
 python3 -m pytest -q
 python3 -m ruff check .
-PYTHONPATH=src python3 -m repo_index_mcp --db .repo-index-mcp/phase4.sqlite doctor
-PYTHONPATH=src python3 -m repo_index_mcp --db .repo-index-mcp/phase4.sqlite eval evals/golden.repo-index-mcp.jsonl . -k 10 --fail-under 0.85
+PYTHONPATH=src python3 -m repo_index_mcp --db .codescry/phase4.sqlite doctor
+PYTHONPATH=src python3 -m repo_index_mcp --db .codescry/phase4.sqlite eval evals/golden.codescry.jsonl . -k 10 --fail-under 0.85
 python3 -m build
-python3 -m venv /tmp/repo-index-smoke
-/tmp/repo-index-smoke/bin/pip install dist/*.whl
-/tmp/repo-index-smoke/bin/repo-index --help
-/tmp/repo-index-smoke/bin/repo-index doctor
+python3 -m venv /tmp/codescry-smoke
+/tmp/codescry-smoke/bin/pip install dist/*.whl
+/tmp/codescry-smoke/bin/codescry --help
+/tmp/codescry-smoke/bin/codescry doctor
 ```
 
 ## Local result
@@ -146,7 +146,7 @@ Latest local validation:
 - `python3 -m pytest -q`: 55 passed.
 - `python3 -m ruff check .`: passed.
 - Eval gate: Recall@10 29/32 = 0.906 with `--fail-under 0.85`.
-- Clean wheel install smoke: `repo-index doctor`, `index`, and `query` passed without `PYTHONPATH`.
+- Clean wheel install smoke: `codescry doctor`, `index`, and `query` passed without `PYTHONPATH`.
 
 ## Exit gate
 

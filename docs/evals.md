@@ -18,17 +18,17 @@ Fields:
 Run:
 
 ```bash
-repo-index eval evals/golden.repo-index-mcp.jsonl . -k 10
-repo-index eval evals/golden.repo-index-mcp.jsonl . -k 10 --json
-repo-index eval evals/golden.repo-index-mcp.jsonl . -k 10 --debug > eval-debug.json
-repo-index eval evals/golden.repo-index-mcp.jsonl . -k 10 --fail-under 0.85
+codescry eval evals/golden.codescry.jsonl . -k 10
+codescry eval evals/golden.codescry.jsonl . -k 10 --json
+codescry eval evals/golden.codescry.jsonl . -k 10 --debug > eval-debug.json
+codescry eval evals/golden.codescry.jsonl . -k 10 --fail-under 0.85
 ```
 
 Add a scrubbed/synthetic case from a pilot miss. Do not commit proprietary snippets, secrets, customer data, or raw private queries to shared eval files.
 
 
 ```bash
-repo-index eval-add evals/golden.repo-index-mcp.jsonl \
+codescry eval-add evals/golden.codescry.jsonl \
   --id pilot-001 \
   --query "retry backoff" \
   --expected-path src/retry.py \

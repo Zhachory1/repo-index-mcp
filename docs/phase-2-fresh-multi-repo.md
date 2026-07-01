@@ -7,26 +7,26 @@ Phase 2 adds repo-root indexing and committed-code freshness primitives.
 Index one repo incrementally:
 
 ```bash
-repo-index index /path/to/repo
+codescry index /path/to/repo
 ```
 
 Discover and index every git repo under a root:
 
 ```bash
-repo-index index-root ~/code
+codescry index-root ~/code
 ```
 
 Install freshness hooks:
 
 ```bash
-repo-index install-hooks /path/to/repo
-repo-index install-hooks ~/code --recursive
+codescry install-hooks /path/to/repo
+codescry install-hooks ~/code --recursive
 ```
 
 Force overwrite existing hook files only when you have reviewed them:
 
 ```bash
-repo-index install-hooks /path/to/repo --force
+codescry install-hooks /path/to/repo --force
 ```
 
 ## Incremental indexing
@@ -63,7 +63,7 @@ Installed hooks:
 Hook action preserves the selected database path:
 
 ```bash
-repo-index --db <db> reindex "$PWD" >/dev/null 2>&1 || true
+codescry --db <db> reindex "$PWD" >/dev/null 2>&1 || true
 ```
 
 The hook is best-effort and must not fail git commands. It may add local reindex latency. `status` still surfaces stale repos by comparing indexed commit with current `HEAD`, shows dirty tracked files separately, and reports repo-level error state.
@@ -79,7 +79,7 @@ Latest local smoke on this repo:
 
 ## Hook freshness measurement
 
-Local hook smoke under `~/code/repo-index-mcp-freshness-smoke`:
+Local hook smoke under `~/code/codescry-freshness-smoke`:
 
 - Installed `post-commit` / `post-merge` hooks.
 - Committed a unique marker function.
@@ -94,6 +94,6 @@ Local code now supports the path; representative adoption should continue measur
 
 - Install hooks on target repos.
 - Commit or merge a change.
-- Confirm `repo-index status` flips back to `is_stale: false` within 60 seconds.
+- Confirm `codescry status` flips back to `is_stale: false` within 60 seconds.
 - Confirm dirty tracked files show as `has_dirty_tracked_files: true` without changing committed-code freshness.
 - Record cold `index-root` duration and repo/file/chunk counts.

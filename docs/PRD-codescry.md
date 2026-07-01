@@ -5,7 +5,7 @@
 **Status:** Draft
 **Last updated:** Jun 26, 2026
 **Owner:** *[Your name]*
-**Working name:** `repo-index-mcp` *(placeholder — rename freely)*
+**Working name:** `codescry` *(placeholder — rename freely)*
 **Next artifact:** Design Document
 
 ---
