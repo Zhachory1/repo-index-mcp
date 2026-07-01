@@ -142,7 +142,7 @@ They preserve the selected DB path and must not fail git commands.
 
 ## Evals
 
-Phase 0 eval docs live in `docs/phase-0-baseline.md`. The seed golden set lives in `evals/golden.codescry.jsonl`.
+The seed golden set lives in `evals/golden.codescry.jsonl`.
 
 Run the eval gate:
 
