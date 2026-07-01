@@ -2,8 +2,17 @@
 
 ## Install
 
+Fast path:
+
+```bash
+curl -LsSf https://raw.githubusercontent.com/Zhachory1/codescry/main/scripts/install.sh | sh
+```
+
+Explicit path:
+
 ```bash
 pipx install codescry
+# or: uv tool install codescry
 codescry doctor
 ```
 

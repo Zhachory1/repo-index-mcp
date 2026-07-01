@@ -4,7 +4,7 @@
 
 - `git not found`: install git and ensure it is on `PATH`.
 - `db_writable` false: choose a writable DB path with `--db /path/to/index.sqlite`.
-- `mcp_dependency` false: reinstall with `pipx install --force codescry`.
+- `mcp_dependency` false: reinstall with `curl -LsSf https://raw.githubusercontent.com/Zhachory1/codescry/main/scripts/install.sh | sh`, or `pipx install --force codescry`.
 - MCP server not appearing in GUI client: use an absolute `command` path from `which codescry`, then restart the client.
 
 ## Query returns `[]`

@@ -1,9 +1,18 @@
 # Upgrade and uninstall
 
-## Upgrade PyPI package
+## Upgrade Python package
+
+Fast path:
+
+```bash
+curl -LsSf https://raw.githubusercontent.com/Zhachory1/codescry/main/scripts/install.sh | sh
+```
+
+Explicit path:
 
 ```bash
 pipx install --force codescry
+# or: uv tool install --upgrade codescry
 ```
 
 ## Upgrade npm wrapper

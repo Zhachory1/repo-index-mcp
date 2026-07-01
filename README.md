@@ -7,13 +7,23 @@ CodeScry is a local codebase retrieval tool for coding agents. It indexes commit
 
 ## Install
 
-From PyPI with `pipx`:
+Fast path:
+
+```bash
+curl -LsSf https://raw.githubusercontent.com/Zhachory1/codescry/main/scripts/install.sh | sh
+```
+
+The installer uses `uv tool install codescry` when `uv` is available, otherwise `pipx install codescry`. If neither `uv` nor `pipx` is installed, it bootstraps `pipx` with `python3 -m pip --user`.
+
+If you prefer explicit installs:
 
 ```bash
 pipx install codescry
+# or, if uv is already installed
+uv tool install codescry
 ```
 
-With npm/npx, after installing [`uv`](https://docs.astral.sh/uv/getting-started/installation/):
+Node users can run the npm wrapper after installing [`uv`](https://docs.astral.sh/uv/getting-started/installation/):
 
 ```bash
 npx codescry doctor
